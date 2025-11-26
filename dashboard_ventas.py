@@ -380,4 +380,71 @@ if df_v is not None:
                 
                 with col_f1:
                     sel_j1 = st.multiselect("Filtro Jerarquía 1", options=j1_opts)
-                    sel_cat = st.multiselect("F
+                    sel_cat = st.multiselect("Filtro Categoría", options=cat_opts)
+                
+                with col_f2:
+                    sel_j2 = st.multiselect("Filtro Jerarquía 2", options=j2_opts)
+                    sel_prod = st.multiselect("Filtro Producto", options=prod_opts)
+
+                with col_f3:
+                    sel_j3 = st.multiselect("Filtro Jerarquía 3", options=j3_opts)
+                
+                # --- APLICACIÓN DE FILTROS Y LÓGICA DE AGRUPACIÓN ---
+                df_audit = dff.copy()
+
+                if sel_j1: df_audit = df_audit[df_audit['jerarquia1'].isin(sel_j1)]
+                if sel_j2: df_audit = df_audit[df_audit['jerarquia2'].isin(sel_j2)]
+                if sel_j3: df_audit = df_audit[df_audit['jerarquia3'].isin(sel_j3)]
+                if sel_cat: df_audit = df_audit[df_audit['categoria'].isin(sel_cat)]
+                if sel_prod: df_audit = df_audit[df_audit['producto'].isin(sel_prod)]
+                
+                if not df_audit.empty:
+                    # Determinar la columna de agrupación más granular
+                    if sel_prod:
+                        col_group = 'producto'
+                    elif sel_cat:
+                        col_group = 'categoria'
+                    elif sel_j3:
+                        col_group = 'jerarquia3'
+                    elif sel_j2:
+                        col_group = 'jerarquia2'
+                    elif sel_j1:
+                        col_group = 'jerarquia1'
+                    else:
+                        col_group = 'jerarquia1' # Default
+                        
+                    st.subheader(f"Mapa de Calor: Vendedor vs {col_group.upper()}")
+                    
+                    pivot = df_audit.groupby(['vendedor', col_group])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_group, values='monto_real').fillna(0)
+                    
+                    fig_heat = px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues', title=f"Venta por {col_group.upper()}")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                    
+                else:
+                    st.warning("No hay datos que coincidan con los filtros seleccionados.")
+            else: st.warning("No hay datos para esta vista.")
+
+        # 7. INTELIGENCIA
+        with tabs[6]:
+            st.header("🧠 Recomendador")
+            if not dff.empty:
+                if 'producto' in dff.columns and 'id_transaccion' in dff.columns:
+                    st.subheader("Cross-Selling (Productos relacionados)")
+                    prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
+                    sel_p = st.selectbox("Si el cliente lleva...", prods)
+                    if sel_p:
+                        txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
+                        sub = dff[dff['id_transaccion'].isin(txs)]
+                        sub = sub[sub['producto'] != sel_p]
+                        if not sub.empty:
+                            rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
+                            st.success("👉 Ofrécele también:")
+                            st.table(rel.set_index('producto'))
+                        else: st.info("No se encontraron productos relacionados en las transacciones.")
+                else: st.warning("Faltan columnas 'producto' o 'id_transaccion'.")
+            else: st.warning("No hay datos suficientes para esta vista.")
+
+
+else:
+    # 🚨 ERROR SI NO ENCUENTRA EL ARCHIVO PRINCIPAL
+    st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
