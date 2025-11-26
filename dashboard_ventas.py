@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v21.0", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v21.1", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -48,7 +48,6 @@ def load_consolidated_data():
         if df_v_raw is not None and 'fecha' in df_v_raw.columns:
             df_v = df_v_raw
             
-            # 1. LIMPIEZA Y PREPARACIÓN DE DF_V
             if 'clienteid' in df_v.columns: df_v['clienteid'] = df_v['clienteid'].astype(str)
             if 'cliente' in df_v.columns: df_v['cliente'] = df_v['cliente'].astype(str).str.strip().str.upper()
 
@@ -69,11 +68,8 @@ def load_consolidated_data():
     # LECTURA DE ASIGNACIONES (MAESTRO DE CLIENTES)
     if os.path.exists(MAESTRO_FILE):
         df_a_raw = read_and_clean(MAESTRO_FILE)
-        # NOMBRES DE COLUMNA DEL MAESTRO: cliente_id y vendedor
         if df_a_raw is not None and 'cliente_id' in df_a_raw.columns and 'vendedor' in df_a_raw.columns:
             df_a = df_a_raw.copy()
-            
-            # --- FIX CRÍTICO: UNIFICAR EL NOMBRE DEL ID ---
             df_a = df_a.rename(columns={'cliente_id': 'clienteid'}) 
             
             df_a['clienteid'] = df_a['clienteid'].astype(str)
@@ -87,20 +83,15 @@ def load_consolidated_data():
             df_p = df_p_raw
             df_p['fecha'] = pd.to_datetime(df_p['fecha'], format='%d/%m/%Y', dayfirst=True, errors='coerce') 
 
-            if 'monto final' in df_p.columns: df_p['monto_pre'] = df_p['monto final']
+            if 'monto_final' in df_p.columns: df_p['monto_pre'] = df_p['monto_final']
             elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
             else: df_p['monto_pre'] = 0
             df_p['id_cruce'] = df_p.get('nro_preventa', df_p.get('nropreventa', 0))
             
     # --- ENRIQUECIMIENTO (FUSIÓN MAESTRO + VENTA) ---
     if df_v is not None and df_a is not None:
-        # Renombrar columna de Venta temporalmente para evitar conflicto
         df_v = df_v.rename(columns={'vendedor': 'vendedor_venta'}) 
-        
-        # Fusionar: Unimos la venta con la asignación del maestro usando clienteid
         df_v = pd.merge(df_v, df_a[['clienteid', 'vendedor']], on='clienteid', how='left')
-        
-        # El vendedor que usamos para los reportes es el ASIGNADO por el MAESTRO (dando prioridad)
         df_v['vendedor'] = df_v['vendedor'].fillna(df_v['vendedor_venta'])
 
 
@@ -181,7 +172,7 @@ if df_v is not None:
 
 
     # --- PESTAÑAS (TODAS FUNCIONALES) ---
-    tabs = st.tabs(["🎯 Penetración (NUEVO)", "📉 Análisis Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🎯 Penetración", "📉 Análisis Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
     
     # 1. PENETRACIÓN (NUEVO MODULO)
     with tabs[0]:
@@ -200,8 +191,6 @@ if df_v is not None:
             penetration_df = pd.merge(assigned_clients, served_clients, on='vendedor', how='left').fillna(0)
             
             penetration_df['Penetracion %'] = (penetration_df['Servidos'] / penetration_df['Asignados'].replace(0, 1)) * 100
-            
-            # 4. Cálculo de White Space
             penetration_df['Espacio Blanco'] = penetration_df['Asignados'] - penetration_df['Servidos']
             
             penetration_df = penetration_df.sort_values('Penetracion %', ascending=False)
@@ -221,7 +210,7 @@ if df_v is not None:
             st.plotly_chart(fig_pen, use_container_width=True)
 
         else:
-            st.warning("⚠️ Falta el archivo 'maestro_de_clientes.csv' para calcular la Penetración.")
+            st.warning("⚠️ Falta el archivo 'maestro_de_clientes.csv' en el repositorio para calcular la Penetración.")
 
 
     # 2. ANÁLISIS CAÍDA
@@ -374,7 +363,7 @@ if df_v is not None:
             else: st.warning("No hay datos para esta vista.")
 
         # 7. AUDITORÍA
-        with tabs[5]:
+        with tabs[6]:
             st.header("🕵️ Mapa de Oportunidades (Gaps)")
             if not dff.empty:
                 
@@ -391,71 +380,4 @@ if df_v is not None:
                 
                 with col_f1:
                     sel_j1 = st.multiselect("Filtro Jerarquía 1", options=j1_opts)
-                    sel_cat = st.multiselect("Filtro Categoría", options=cat_opts)
-                
-                with col_f2:
-                    sel_j2 = st.multiselect("Filtro Jerarquía 2", options=j2_opts)
-                    sel_prod = st.multiselect("Filtro Producto", options=prod_opts)
-
-                with col_f3:
-                    sel_j3 = st.multiselect("Filtro Jerarquía 3", options=j3_opts)
-                
-                # --- APLICACIÓN DE FILTROS Y LÓGICA DE AGRUPACIÓN ---
-                df_audit = dff.copy()
-
-                if sel_j1: df_audit = df_audit[df_audit['jerarquia1'].isin(sel_j1)]
-                if sel_j2: df_audit = df_audit[df_audit['jerarquia2'].isin(sel_j2)]
-                if sel_j3: df_audit = df_audit[df_audit['jerarquia3'].isin(sel_j3)]
-                if sel_cat: df_audit = df_audit[df_audit['categoria'].isin(sel_cat)]
-                if sel_prod: df_audit = df_audit[df_audit['producto'].isin(sel_prod)]
-                
-                if not df_audit.empty:
-                    # Determinar la columna de agrupación más granular
-                    if sel_prod:
-                        col_group = 'producto'
-                    elif sel_cat:
-                        col_group = 'categoria'
-                    elif sel_j3:
-                        col_group = 'jerarquia3'
-                    elif sel_j2:
-                        col_group = 'jerarquia2'
-                    elif sel_j1:
-                        col_group = 'jerarquia1'
-                    else:
-                        col_group = 'jerarquia1' # Default
-                        
-                    st.subheader(f"Mapa de Calor: Vendedor vs {col_group.upper()}")
-                    
-                    pivot = df_audit.groupby(['vendedor', col_group])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_group, values='monto_real').fillna(0)
-                    
-                    fig_heat = px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues', title=f"Venta por {col_group.upper()}")
-                    st.plotly_chart(fig_heat, use_container_width=True)
-                    
-                else:
-                    st.warning("No hay datos que coincidan con los filtros seleccionados.")
-            else: st.warning("No hay datos para esta vista.")
-
-        # 7. INTELIGENCIA
-        with tabs[6]:
-            st.header("🧠 Recomendador")
-            if not dff.empty:
-                if 'producto' in dff.columns and 'id_transaccion' in dff.columns:
-                    st.subheader("Cross-Selling (Productos relacionados)")
-                    prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
-                    sel_p = st.selectbox("Si el cliente lleva...", prods)
-                    if sel_p:
-                        txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
-                        sub = dff[dff['id_transaccion'].isin(txs)]
-                        sub = sub[sub['producto'] != sel_p]
-                        if not sub.empty:
-                            rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
-                            st.success("👉 Ofrécele también:")
-                            st.table(rel.set_index('producto'))
-                        else: st.info("No se encontraron productos relacionados en las transacciones.")
-                else: st.warning("Faltan columnas 'producto' o 'id_transaccion'.")
-            else: st.warning("No hay datos suficientes para esta vista.")
-
-
-else:
-    # 🚨 ERROR SI NO ENCUENTRA EL ARCHIVO PRINCIPAL
-    st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
+                    sel_cat = st.multiselect("F
