@@ -1,30 +1,3 @@
-¡Entendido! Quieres eliminar la fricción. Si el vendedor tiene que entrar a una web, loguearse y filtrar, no lo va a hacer.
-
-La solución es que TÚ (o el supervisor) uses el Dashboard para generar un Mensaje de Texto con Enlaces listo para copiar y pegar en el chat de WhatsApp del vendedor.
-
-📲 La Solución: "El Generador de Rutas de WhatsApp"
-He creado la Versión 31.0.
-
-¿Cómo funciona esta nueva función?
-Vas a la pestaña "🗺️ Mapa".
-
-Seleccionas a un vendedor (ej: Raúl Melgar).
-
-Automáticamente, el sistema genera un texto así:
-
-🚨 RUTA PENDIENTE - RAÚL MELGAR Tienes 5 clientes sin visitar hoy:
-
-❌ TIENDA DOÑA MARÍA 📍 Ir: https://maps.google.com/...
-
-❌ FARMACIA CENTRAL 📍 Ir: https://maps.google.com/...
-
-Tú solo le das al botón de copiar y lo pegas en su chat. Él solo tiene que darle clic a los enlaces azules y el GPS lo lleva.
-
-💻 Código V31.0 (Generador de WhatsApp Integrado)
-Instrucciones: Reemplaza todo el código en dashboard_ventas.py y haz el commit.
-
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
