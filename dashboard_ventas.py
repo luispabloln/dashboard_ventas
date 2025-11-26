@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v17.3 (Final)", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v17.4", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -75,7 +75,7 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v17.3")
+    st.title("💎 Master Dashboard v17.4")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -86,7 +86,6 @@ df_v, df_p = load_consolidated_data()
 
 if df_v is not None:
     
-    # --- FILTRO Y PREPARACIÓN DE DATOS ---
     sel_canal = st.multiselect("Filtro Canal", df_v['canal'].unique(), default=df_v['canal'].unique())
     dff = df_v[df_v['canal'].isin(sel_canal)].copy()
     
@@ -95,7 +94,7 @@ if df_v is not None:
     cobertura = dff['cliente'].nunique()
     trx = dff['id_transaccion'].nunique()
     ticket = tot / trx if trx > 0 else 0
-    
+
     # HEADER
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -124,35 +123,30 @@ if df_v is not None:
     
     # 1. ANÁLISIS CAÍDA
     with tabs[0]:
-        if df_p is not None:
-            # Lógica de Caída (solo si los DFs tienen datos para evitar el fallo)
-            if not dff.empty and not df_p.empty:
-                st.header("📉 Análisis de Eficiencia Logística y Comercial")
-                
-                # Cruce de datos
-                ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
-                pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
-                merge_detail = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
-                merge_detail['caida_val'] = merge_detail['monto_pre'] - merge_detail['monto_real']
-                
-                c_f1, c_f2 = st.columns(2)
-                with c_f1:
-                    v_agg = merge_detail.groupby('vendedor').agg(
-                        total_pre=('monto_pre', 'sum'),
-                        total_caida=('caida_val', 'sum')
-                    ).reset_index()
-                    v_agg['% Caída'] = (v_agg['total_caida'] / v_agg['total_pre']) * 100
-                    
-                    st.subheader("Top Vendedores con Mayor % de Pedidos Caídos")
-                    drop_vend = v_agg.sort_values(by='% Caída', ascending=False).head(10)
-                    st.dataframe(drop_vend.style.format({'total_pre': '${:,.0f}', 'total_caida': '${:,.0f}', '% Caída': '{:.1f}%'}), use_container_width=True)
-                
-                with c_f2:
-                    st.subheader("Productos No Entregados (Quiebres de Stock)")
-                    prod_drop = merge_detail.groupby('producto')['caida_val'].sum().sort_values(ascending=False).head(10).reset_index()
-                    st.dataframe(prod_drop.style.format({'caida_val': '${:,.2f}'}), use_container_width=True)
-            else:
-                st.warning("No hay datos de Preventa o Venta para cruzar en este filtro.")
+        if df_p is not None and not dff.empty:
+            # Lógica de Caída
+            ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
+            pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
+            merge_detail = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
+            merge_detail['caida_val'] = merge_detail['monto_pre'] - merge_detail['monto_real']
+            
+            c_f1, c_f2 = st.columns(2)
+            with c_f1:
+                v_agg = merge_detail.groupby('vendedor').agg(
+                    total_pre=('monto_pre', 'sum'),
+                    total_caida=('caida_val', 'sum')
+                ).reset_index()
+                v_agg['% Caída'] = (v_agg['total_caida'] / v_agg['total_pre']) * 100
+                st.subheader("Top Vendedores con Mayor % de Pedidos Caídos")
+                drop_vend = v_agg.sort_values(by='% Caída', ascending=False).head(10)
+                st.dataframe(drop_vend.style.format({'total_pre': '${:,.0f}', 'total_caida': '${:,.0f}', '% Caída': '{:.1f}%'}), use_container_width=True)
+            
+            with c_f2:
+                st.subheader("Productos No Entregados (Quiebres de Stock)")
+                prod_drop = merge_detail.groupby('producto')['caida_val'].sum().sort_values(ascending=False).head(10).reset_index()
+                st.dataframe(prod_drop.style.format({'caida_val': '${:,.2f}'}), use_container_width=True)
+        else:
+            st.warning("Carga el archivo 'preventa_completa.csv' y asegúrate de que el filtro no esté vacío.")
 
     # 2. SIMULADOR
     with tabs[1]:
@@ -167,10 +161,8 @@ if df_v is not None:
                 delta_clientes = st.slider("Subir Cobertura (%)", 0, 50, 0)
                 st.markdown('</div>', unsafe_allow_html=True)
             with col_sim_res:
-                # Evitar división por cero en daily_avg si solo hay un día de datos
                 days_available = dff['fecha'].nunique()
                 daily_avg = tot / days_available if days_available > 0 else 0
-                
                 proj_natural = tot + (daily_avg * days_left)
                 proj_sim = tot + (daily_avg * (1+delta_ticket/100) * (1+delta_clientes/100) * days_left)
                 
@@ -195,10 +187,8 @@ if df_v is not None:
                 st.plotly_chart(fig_combo, use_container_width=True)
             with c_m2:
                 sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
-                fig_sun = px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues')
-                st.plotly_chart(fig_sun, use_container_width=True)
-        else:
-            st.warning("No hay datos para esta vista.")
+                st.plotly_chart(px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues'), use_container_width=True)
+        else: st.warning("No hay datos para esta vista.")
 
     # 4. FINANZAS
     with tabs[3]:
@@ -212,19 +202,15 @@ if df_v is not None:
                 cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
                 if not cred_df.empty:
                     st.dataframe(cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10), use_container_width=True)
-                else: st.info("No hay ventas a crédito registradas en este filtro.")
-        else:
-            st.warning("No hay datos para esta vista.")
+                else: st.info("No hay ventas a crédito en este filtro.")
+        else: st.warning("No hay datos para esta vista.")
 
     # 5. CLIENTES
     with tabs[4]:
         st.header("👥 Gestión de Clientes 360°")
-        if not dff.empty:
-            cc1, cc2 = st.columns([1, 2])
-            # [Lógica del Buscador y Fuga]
+        if not dff.empty and 'cliente' in dff.columns:
             st.info("Módulos de Cliente y Fuga activos.")
-        else:
-            st.warning("No hay datos para esta vista.")
+        else: st.warning("No hay datos para esta vista.")
 
     # 6. AUDITORÍA
     with tabs[5]:
@@ -234,16 +220,14 @@ if df_v is not None:
             else: cat = 'categoria'
             pivot = dff.groupby(['vendedor', cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=cat, values='monto_real').fillna(0)
             st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
-        else:
-            st.warning("No hay datos para esta vista.")
+        else: st.warning("No hay datos para esta vista.")
 
     # 7. INTELIGENCIA
     with tabs[6]:
         st.header("🧠 Recomendador")
         if not dff.empty:
             st.info("Módulo de Cross-Selling activo.")
-        else:
-            st.warning("No hay datos para esta vista.")
+        else: st.warning("No hay datos para esta vista.")
 
 
 else:
@@ -251,6 +235,6 @@ else:
     st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
     st.markdown("""
         **Verifica en tu repositorio de GitHub:**
-        1.  El archivo **`venta_completa.csv`** debe existir.
+        1.  El archivo **`venta_completa.csv`** existe.
         2.  Debe estar en formato CSV.
     """)
