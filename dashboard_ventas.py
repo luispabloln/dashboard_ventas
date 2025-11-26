@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v18.2", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v21.0", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -27,16 +27,18 @@ st.markdown("""
 def load_consolidated_data():
     VENTA_FILE = 'venta_completa.csv'
     PREVENTA_FILE = 'preventa_completa.csv'
+    MAESTRO_FILE = 'maestro_de_clientes.csv' # Archivo de asignación
     
-    df_v, df_p = None, None
+    df_v, df_p, df_a = None, None, None
     
     def read_and_clean(file_path):
         try:
-            df_temp = pd.read_csv(file_path, sep=',', on_bad_lines='skip', encoding='utf-8')
+            # Lectura robusta con ; por defecto
+            df_temp = pd.read_csv(file_path, sep=';', on_bad_lines='skip', encoding='utf-8') 
             if df_temp.shape[1] < 5: 
-                df_temp = pd.read_csv(file_path, sep=';', on_bad_lines='skip', encoding='utf-8')
+                df_temp = pd.read_csv(file_path, sep=',', on_bad_lines='skip', encoding='utf-8') 
             
-            df_temp.columns = df_temp.columns.str.strip().str.lower()
+            df_temp.columns = df_temp.columns.str.strip().str.lower().str.replace(' ', '_') # Limpieza robusta
             return df_temp
         except Exception:
             return None
@@ -54,8 +56,7 @@ def load_consolidated_data():
             df_v['semana_anio'] = df_v['fecha'].dt.isocalendar().week
             
             if 'montofinal' in df_v.columns: df_v['monto_real'] = df_v['montofinal']
-            elif 'monto' in df_v.columns: df_v['monto_real'] = df_v['monto']
-            else: df_v['monto_real'] = 0
+            else: df_v['monto_real'] = df_v['monto']
             
             df_v['id_transaccion'] = df_v.get('ventaid', df_v.columns[0])
             df_v['canal'] = df_v['vendedor'].map({
@@ -65,6 +66,19 @@ def load_consolidated_data():
                 'LUIS PABLO LOPEZ NEGRETE': '4. INSTITUCIONAL', 'JAVIER JUSTINIANO GOMEZ': '5. PARETOS TDB'
             }).fillna('6. RUTA TDB')
 
+    # LECTURA DE ASIGNACIONES (MAESTRO DE CLIENTES)
+    if os.path.exists(MAESTRO_FILE):
+        df_a_raw = read_and_clean(MAESTRO_FILE)
+        if df_a_raw is not None and 'cliente_id' in df_a_raw.columns and 'vendedor' in df_a_raw.columns:
+            df_a = df_a_raw.copy()
+            
+            # --- FIX CRÍTICO: UNIFICAR EL NOMBRE DEL ID ---
+            df_a = df_a.rename(columns={'cliente_id': 'clienteid'}) 
+            
+            df_a['clienteid'] = df_a['clienteid'].astype(str)
+            df_a['vendedor'] = df_a['vendedor'].astype(str).str.strip()
+            df_a = df_a[['clienteid', 'vendedor']].drop_duplicates(subset=['clienteid']) 
+
     # LECTURA DE PREVENTA
     if os.path.exists(PREVENTA_FILE):
         df_p_raw = read_and_clean(PREVENTA_FILE)
@@ -72,12 +86,18 @@ def load_consolidated_data():
             df_p = df_p_raw
             df_p['fecha'] = pd.to_datetime(df_p['fecha'], format='%d/%m/%Y', dayfirst=True, errors='coerce') 
 
-            if 'monto final' in df_p.columns: df_p['monto_pre'] = df_p['monto final']
+            if 'monto_final' in df_p.columns: df_p['monto_pre'] = df_p['monto_final']
             elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
             else: df_p['monto_pre'] = 0
-            df_p['id_cruce'] = df_p.get('nro preventa', df_p.get('nropreventa', 0))
+            df_p['id_cruce'] = df_p.get('nro_preventa', df_p.get('nropreventa', 0))
             
-    return df_v, df_p
+    # --- ENRIQUECIMIENTO (FUSIÓN MAESTRO + VENTA) ---
+    if df_v is not None and df_a is not None:
+        df_v = df_v.rename(columns={'vendedor': 'vendedor_venta'}) 
+        df_v = pd.merge(df_v, df_a[['clienteid', 'vendedor']], on='clienteid', how='left')
+        df_v['vendedor'] = df_v['vendedor'].fillna(df_v['vendedor_venta']) # Usar el vendedor del Maestro
+        
+    return df_v, df_p, df_a
 
 # --- FUNCIÓN PARA OBTENER FECHA MÁXIMA DE FORMA SEGURA ---
 def get_max_date_safe(df):
@@ -93,14 +113,14 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v18.2")
+    st.title("💎 Master Dashboard v21.0")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
     meta = st.number_input("Objetivo Mensual ($)", value=2500000, step=100000)
 
 # Ejecución de carga
-df_v, df_p = load_consolidated_data()
+df_v, df_p, df_a = load_consolidated_data()
 
 if df_v is not None:
     
@@ -154,10 +174,49 @@ if df_v is not None:
 
 
     # --- PESTAÑAS (TODAS FUNCIONALES) ---
-    tabs = st.tabs(["📉 Análisis Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🎯 Penetración", "📉 Análisis Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 1. ANÁLISIS CAÍDA
+    # 1. PENETRACIÓN (NUEVO MODULO)
     with tabs[0]:
+        if df_a is not None:
+            st.header("🎯 Penetración de Cobertura Asignada")
+            
+            # 1. Clientes Asignados por Vendedor (del Maestro)
+            assigned_clients = df_a.groupby('vendedor')['clienteid'].nunique().reset_index()
+            assigned_clients.columns = ['vendedor', 'Asignados']
+            
+            # 2. Clientes Servidos por Vendedor (DEL PERIODO ACTUAL)
+            served_clients = dff.groupby('vendedor')['clienteid'].nunique().reset_index()
+            served_clients.columns = ['vendedor', 'Servidos']
+            
+            # 3. Merge y Cálculo
+            penetration_df = pd.merge(assigned_clients, served_clients, on='vendedor', how='left').fillna(0)
+            
+            penetration_df['Penetracion %'] = (penetration_df['Servidos'] / penetration_df['Asignados'].replace(0, 1)) * 100
+            penetration_df['Espacio Blanco'] = penetration_df['Asignados'] - penetration_df['Servidos']
+            
+            penetration_df = penetration_df.sort_values('Penetracion %', ascending=False)
+            
+            st.subheader("Efectividad de Cobertura por Vendedor")
+            st.dataframe(
+                penetration_df.style.format({'Penetracion %': '{:.1f}%', 'Asignados': '{:.0f}', 'Servidos': '{:.0f}', 'Espacio Blanco': '{:.0f}'}), 
+                use_container_width=True
+            )
+            
+            # Gráfico de Espacio Blanco (Barra apilada)
+            fig_pen = go.Figure(data=[
+                go.Bar(name='Servidos', y=penetration_df['vendedor'], x=penetration_df['Servidos'], orientation='h', marker_color='#2ECC71'),
+                go.Bar(name='Espacio Blanco', y=penetration_df['vendedor'], x=penetration_df['Espacio Blanco'], orientation='h', marker_color='#E74C3C')
+            ])
+            fig_pen.update_layout(barmode='stack', title="Clientes Asignados vs Clientes Servidos", height=500)
+            st.plotly_chart(fig_pen, use_container_width=True)
+
+        else:
+            st.warning("⚠️ Falta el archivo 'maestro_de_clientes.csv' en el repositorio para calcular la Penetración.")
+
+
+    # 2. ANÁLISIS CAÍDA
+    with tabs[1]:
         if df_p is not None and not dff.empty:
             st.header("📉 Análisis de Eficiencia Logística y Comercial")
             
@@ -185,8 +244,8 @@ if df_v is not None:
         else:
             st.warning("Carga el archivo 'preventa_completa.csv' y asegúrate de que el filtro no esté vacío.")
 
-    # 2. SIMULADOR
-    with tabs[1]:
+    # 3. SIMULADOR
+    with tabs[2]:
         st.header("🎮 Simulador de Cierre")
         if not dff.empty:
             col_sim_input, col_sim_res = st.columns([1, 2])
@@ -210,8 +269,8 @@ if df_v is not None:
         else:
             st.warning("No hay datos para simular.")
 
-    # 3. ESTRATEGIA (CON COMBO CHART CORREGIDO Y TAMAÑO AJUSTADO)
-    with tabs[2]:
+    # 4. ESTRATEGIA (CON COMBO CHART CORREGIDO Y TAMAÑO AJUSTADO)
+    with tabs[3]:
         st.header("📈 Estrategia y Visión Macro")
         if not dff.empty and 'clienteid' in dff.columns:
             
@@ -228,12 +287,14 @@ if df_v is not None:
             
             st.subheader("Jerarquía de Ventas (Sunburst)")
             sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
-            st.plotly_chart(px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues'), use_container_width=True)
+            fig_sun = px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues')
+            fig_sun.update_layout(height=600, margin=dict(t=0, l=0, r=0, b=0))
+            st.plotly_chart(fig_sun, use_container_width=True)
             
         else: st.warning("No hay datos para esta vista.")
 
-    # 4. FINANZAS
-    with tabs[3]:
+    # 5. FINANZAS
+    with tabs[4]:
         st.header("💳 Salud Financiera")
         if not dff.empty:
             pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
@@ -249,8 +310,8 @@ if df_v is not None:
                 else: st.info("No hay ventas a crédito en este filtro.")
         else: st.warning("No hay datos para esta vista.")
 
-    # 5. CLIENTES
-    with tabs[4]:
+    # 6. CLIENTES
+    with tabs[5]:
         st.header("👥 Gestión de Clientes 360°")
         if not dff.empty:
             cc1, cc2 = st.columns([1, 2])
@@ -303,8 +364,8 @@ if df_v is not None:
                 st.dataframe(risk_df_temp.sort_values('monto_real', ascending=False).head(10), use_container_width=True)
             else: st.warning("No hay datos para esta vista.")
 
-        # 6. AUDITORÍA
-        with tabs[5]:
+        # 7. AUDITORÍA
+        with tabs[6]:
             st.header("🕵️ Mapa de Oportunidades (Gaps)")
             if not dff.empty:
                 
