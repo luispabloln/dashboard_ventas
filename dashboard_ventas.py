@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v18.2", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v19.0", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -47,7 +47,6 @@ def load_consolidated_data():
         if df_v_raw is not None and 'fecha' in df_v_raw.columns:
             df_v = df_v_raw
             
-            # --- LIMPIEZA CRÍTICA DE CLIENTES ---
             if 'clienteid' in df_v.columns: df_v['clienteid'] = df_v['clienteid'].astype(str)
             if 'cliente' in df_v.columns: df_v['cliente'] = df_v['cliente'].astype(str).str.strip().str.upper()
 
@@ -94,7 +93,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v18.2")
+    st.title("💎 Master Dashboard v19.0")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -111,7 +110,7 @@ if df_v is not None:
     
     # KPIs Globales
     tot = dff['monto_real'].sum()
-    cobertura = dff['clienteid'].nunique() # COBERTURA OK
+    cobertura = dff['clienteid'].nunique()
     trx = dff['id_transaccion'].nunique()
     ticket = tot / trx if trx > 0 else 0
 
@@ -261,7 +260,8 @@ if df_v is not None:
                 st.write("Ranking Crédito")
                 cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
                 if not cred_df.empty:
-                    st.dataframe(cred_rank.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10), use_container_width=True)
+                    cred_rank = cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10)
+                    st.dataframe(cred_rank.style.format({'monto_real': '${:,.0f}'}), use_container_width=True)
                 else: st.info("No hay ventas a crédito en este filtro.")
         else: st.warning("No hay datos para esta vista.")
 
@@ -274,7 +274,6 @@ if df_v is not None:
                 st.markdown("#### 🔎 Buscador Individual")
                 if 'cliente' in dff.columns and 'clienteid' in dff.columns and not dff['cliente'].empty:
                     
-                    # Crear mapa de Nombre a ID para la búsqueda
                     client_map_df = dff[['clienteid', 'cliente']].drop_duplicates()
                     client_map = client_map_df.set_index('cliente')['clienteid'].to_dict()
                     cl_list = sorted(client_map_df['cliente'].unique())
@@ -282,8 +281,8 @@ if df_v is not None:
                     sel_cl_name = st.selectbox("Seleccionar Cliente:", cl_list)
                     
                     if sel_cl_name:
-                        sel_cl_id = client_map[sel_cl_name] # Obtener ID Único
-                        c_dat = dff[dff['clienteid'] == sel_cl_id] # Filtrar por ID
+                        sel_cl_id = client_map[sel_cl_name]
+                        c_dat = dff[dff['clienteid'] == sel_cl_id]
                         
                         c_tot = c_dat['monto_real'].sum()
                         c_last = c_dat['fecha'].max()
