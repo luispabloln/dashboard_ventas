@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v19.0", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v19.1", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -93,7 +93,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v19.0")
+    st.title("💎 Master Dashboard v19.1")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -260,7 +260,8 @@ if df_v is not None:
                 st.write("Ranking Crédito")
                 cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
                 if not cred_df.empty:
-                    cred_rank = cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10)
+                    cred_rank = cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10).reset_index()
+                    cred_rank.columns = ['vendedor', 'monto_real'] # Asegurar nombres
                     st.dataframe(cred_rank.style.format({'monto_real': '${:,.0f}'}), use_container_width=True)
                 else: st.info("No hay ventas a crédito en este filtro.")
         else: st.warning("No hay datos para esta vista.")
