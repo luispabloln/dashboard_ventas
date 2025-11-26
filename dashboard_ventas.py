@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v19.2", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v19.3", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -93,7 +93,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v19.2")
+    st.title("💎 Master Dashboard v19.3")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -194,161 +194,4 @@ if df_v is not None:
                 st.markdown('<div class="metric-card"><h5>🎛️ Ajustes</h5>', unsafe_allow_html=True)
                 days_left = max(0, 30 - dff['fecha'].max().day)
                 st.info(f"Días restantes: {days_left}")
-                delta_ticket = st.slider("Subir Ticket (%)", 0, 50, 0)
-                delta_clientes = st.slider("Subir Cobertura (%)", 0, 50, 0)
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col_sim_res:
-                days_available = dff['fecha'].nunique()
-                daily_avg = tot / days_available if days_available > 0 else 0
-                proj_natural = tot + (daily_avg * days_left)
-                proj_sim = tot + (daily_avg * (1+delta_ticket/100) * (1+delta_clientes/100) * days_left)
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Cierre Natural", f"${proj_natural:,.0f}")
-                m2.metric("Cierre Simulado", f"${proj_sim:,.0f}", delta=f"+${proj_sim-proj_natural:,.0f}")
-                m3.metric("vs Meta", f"${proj_sim - meta:,.0f}")
-        else:
-            st.warning("No hay datos para simular.")
-
-    # 3. ESTRATEGIA (CON COMBO CHART CORREGIDO)
-    with tabs[2]:
-        st.header("📈 Estrategia y Visión Macro")
-        if not dff.empty and 'clienteid' in dff.columns:
-            c_m1, c_m2 = st.columns([2, 1])
-            with c_m1:
-                st.subheader("Venta vs Penetración (Combo Chart)")
-                
-                daily = dff.groupby('fecha').agg({
-                    'monto_real':'sum',
-                    'clienteid':'nunique'
-                }).reset_index()
-                
-                fig_combo = go.Figure()
-                fig_combo.add_trace(go.Bar(x=daily['fecha'], y=daily['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
-                
-                fig_combo.add_trace(go.Scatter(
-                    x=daily['fecha'], 
-                    y=daily['clienteid'],
-                    name='Cobertura (Clientes)', 
-                    yaxis='y2', 
-                    line=dict(color='#3498DB', width=3),
-                    mode='lines+markers'
-                ))
-                
-                fig_combo.update_layout(
-                    yaxis=dict(title="Venta ($)", showgrid=False),
-                    yaxis2=dict(title="Cobertura (Clientes)", overlaying='y', side='right', showgrid=False),
-                    plot_bgcolor='white', height=550, title="Evolución Venta vs Clientes Únicos" # Altura ajustada
-                )
-                st.plotly_chart(fig_combo, use_container_width=True)
-            with c_m2:
-                st.subheader("Jerarquía (Sunburst)")
-                sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
-                st.plotly_chart(px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues'), use_container_width=True)
-        else: st.warning("No hay datos para esta vista.")
-
-    # 4. FINANZAS
-    with tabs[3]:
-        st.header("💳 Salud Financiera")
-        if not dff.empty:
-            pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
-            cp1, cp2 = st.columns(2)
-            with cp1: st.plotly_chart(px.pie(pay, values='monto_real', names='tipopago', title="Mix Cobranza"), use_container_width=True)
-            with cp2:
-                st.write("Ranking Crédito")
-                cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
-                if not cred_df.empty:
-                    cred_rank = cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10).reset_index()
-                    cred_rank.columns = ['vendedor', 'monto_real'] # Asegurar nombres para el formato
-                    st.dataframe(cred_rank.style.format({'monto_real': '${:,.0f}'}), use_container_width=True)
-                else: st.info("No hay ventas a crédito en este filtro.")
-        else: st.warning("No hay datos para esta vista.")
-
-    # 5. CLIENTES
-    with tabs[4]:
-        st.header("👥 Gestión de Clientes 360°")
-        if not dff.empty:
-            cc1, cc2 = st.columns([1, 2])
-            with cc1:
-                st.markdown("#### 🔎 Buscador Individual")
-                if 'cliente' in dff.columns and 'clienteid' in dff.columns and not dff['cliente'].empty:
-                    
-                    client_map_df = dff[['clienteid', 'cliente']].drop_duplicates()
-                    client_map = client_map_df.set_index('cliente')['clienteid'].to_dict()
-                    cl_list = sorted(client_map_df['cliente'].unique())
-                    
-                    sel_cl_name = st.selectbox("Seleccionar Cliente:", cl_list)
-                    
-                    if sel_cl_name:
-                        sel_cl_id = client_map[sel_cl_name]
-                        c_dat = dff[dff['clienteid'] == sel_cl_id]
-                        
-                        c_tot = c_dat['monto_real'].sum()
-                        c_last = c_dat['fecha'].max()
-                        days = (dff['fecha'].max() - c_last).days
-                        weeks = c_dat['semana_anio'].nunique()
-                        freq = c_dat['id_transaccion'].nunique() / weeks if weeks > 0 else 0
-
-                        st.info(f"Cliente: **{sel_cl_name}**")
-                        m1, m2 = st.columns(2)
-                        m1.metric("Total", f"${c_tot:,.0f}")
-                        m2.metric("Frecuencia", f"{freq:.1f} /sem")
-                        st.write(f"📅 Última: {c_last.strftime('%d-%m-%Y')}")
-                        if days > 7: st.error(f"🚨 Inactivo hace {days} días")
-                        else: st.success(f"✅ Activo")
-            
-            with cc2:
-                if 'cliente' in dff.columns and 'producto' in dff.columns and sel_cl_name:
-                    st.markdown(f"#### 📦 ¿Qué compra {sel_cl_name}?")
-                    top_p_client = c_dat.groupby('producto')['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False).head(10).reset_index()
-                    fig_cl_prod = px.bar(top_p_client, x='monto_real', y='producto', orientation='h', text_auto='.2s', color='monto_real', color_continuous_scale='Teal')
-                    st.plotly_chart(fig_cl_prod, use_container_width=True)
-            
-            st.markdown("---")
-            st.markdown("#### 🚨 Alerta de Fuga")
-            if 'clienteid' in dff.columns and not dff['clienteid'].empty:
-                w1_end = df_v['fecha'].min() + datetime.timedelta(days=7)
-                w_last = df_v['fecha'].max() - datetime.timedelta(days=7)
-                start_cl = set(dff[dff['fecha'] <= w1_end]['clienteid'].unique())
-                end_cl = set(dff[dff['fecha'] >= w_last]['clienteid'].unique())
-                churn_ids = list(start_cl - end_cl)
-                
-                risk_df_temp = dff[dff['clienteid'].isin(churn_ids)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index()
-                st.error(f"⚠️ {len(churn_ids)} Clientes no recompraron la última semana")
-                st.dataframe(risk_df_temp.sort_values('monto_real', ascending=False).head(10), use_container_width=True)
-            else: st.warning("No hay datos para esta vista.")
-
-        # 6. AUDITORÍA
-        with tabs[5]:
-            st.header("🕵️ Mapa de Oportunidades (Gaps)")
-            if not dff.empty:
-                if 'jerarquia1' in dff.columns: col_cat = 'jerarquia1'
-                else: col_cat = 'categoria'
-                pivot = dff.groupby(['vendedor', col_cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_cat, values='monto_real').fillna(0)
-                st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
-            else: st.warning("No hay datos para esta vista.")
-
-        # 7. INTELIGENCIA
-        with tabs[6]:
-            st.header("🧠 Recomendador")
-            if not dff.empty:
-                if 'producto' in dff.columns and 'id_transaccion' in dff.columns:
-                    st.subheader("Cross-Selling (Productos relacionados)")
-                    prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
-                    sel_p = st.selectbox("Si el cliente lleva...", prods)
-                    if sel_p:
-                        txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
-                        sub = dff[dff['id_transaccion'].isin(txs)]
-                        sub = sub[sub['producto'] != sel_p]
-                        if not sub.empty:
-                            rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
-                            st.success("👉 Ofrécele también:")
-                            st.table(rel.set_index('producto'))
-                        else: st.info("No se encontraron productos relacionados en las transacciones.")
-                else: st.warning("Faltan columnas 'producto' o 'id_transaccion'.")
-            else: st.warning("No hay datos suficientes para esta vista.")
-
-
-else:
-    # 🚨 ERROR SI NO ENCUENTRA EL ARCHIVO PRINCIPAL
-    st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
+                delta_ticket = st.slider("Subir Ticket (%)", 0, 50, 0
