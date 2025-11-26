@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v19.3", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v19.4", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -93,7 +93,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v19.3")
+    st.title("💎 Master Dashboard v19.4")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -224,6 +224,7 @@ if df_v is not None:
             
             fig_combo = go.Figure()
             fig_combo.add_trace(go.Bar(x=daily['fecha'], y=daily['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
+            
             fig_combo.add_trace(go.Scatter(
                 x=daily['fecha'], 
                 y=daily['clienteid'],
