@@ -86,6 +86,7 @@ df_v, df_p = load_consolidated_data()
 
 if df_v is not None:
     
+    # --- FILTRO Y PREPARACIÓN DE DATOS ---
     sel_canal = st.multiselect("Filtro Canal", df_v['canal'].unique(), default=df_v['canal'].unique())
     dff = df_v[df_v['canal'].isin(sel_canal)].copy()
     
@@ -124,7 +125,8 @@ if df_v is not None:
     # 1. ANÁLISIS CAÍDA
     with tabs[0]:
         if df_p is not None and not dff.empty:
-            # Lógica de Caída
+            st.header("📉 Análisis de Eficiencia Logística y Comercial")
+            
             ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
             pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
             merge_detail = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
@@ -137,6 +139,7 @@ if df_v is not None:
                     total_caida=('caida_val', 'sum')
                 ).reset_index()
                 v_agg['% Caída'] = (v_agg['total_caida'] / v_agg['total_pre']) * 100
+                
                 st.subheader("Top Vendedores con Mayor % de Pedidos Caídos")
                 drop_vend = v_agg.sort_values(by='% Caída', ascending=False).head(10)
                 st.dataframe(drop_vend.style.format({'total_pre': '${:,.0f}', 'total_caida': '${:,.0f}', '% Caída': '{:.1f}%'}), use_container_width=True)
@@ -205,36 +208,84 @@ if df_v is not None:
                 else: st.info("No hay ventas a crédito en este filtro.")
         else: st.warning("No hay datos para esta vista.")
 
-    # 5. CLIENTES
+    # 5. CLIENTES (CON DOBLE CHECK DE ESTABILIDAD)
     with tabs[4]:
         st.header("👥 Gestión de Clientes 360°")
-        if not dff.empty and 'cliente' in dff.columns:
-            st.info("Módulos de Cliente y Fuga activos.")
-        else: st.warning("No hay datos para esta vista.")
-
-    # 6. AUDITORÍA
-    with tabs[5]:
-        st.header("🕵️ Mapa de Oportunidades (Gaps)")
         if not dff.empty:
-            if 'jerarquia1' in dff.columns: cat = 'jerarquia1'
-            else: cat = 'categoria'
-            pivot = dff.groupby(['vendedor', cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=cat, values='monto_real').fillna(0)
-            st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
-        else: st.warning("No hay datos para esta vista.")
+            cc1, cc2 = st.columns([1, 2])
+            with cc1:
+                st.markdown("#### 🔎 Buscador Individual")
+                # Solo mostrar selector si hay clientes después del filtro
+                if 'cliente' in dff.columns and not dff['cliente'].empty:
+                    cl_list = sorted(dff['cliente'].unique())
+                    sel_cl = st.selectbox("Seleccionar Cliente:", cl_list)
+                    
+                    if sel_cl:
+                        c_dat = dff[dff['cliente'] == sel_cl]
+                        c_tot = c_dat['monto_real'].sum()
+                        c_last = c_dat['fecha'].max()
+                        days = (dff['fecha'].max() - c_last).days
+                        weeks = c_dat['semana_anio'].nunique()
+                        freq = c_dat['id_transaccion'].nunique() / weeks if weeks > 0 else 0
 
-    # 7. INTELIGENCIA
-    with tabs[6]:
-        st.header("🧠 Recomendador")
-        if not dff.empty:
-            st.info("Módulo de Cross-Selling activo.")
-        else: st.warning("No hay datos para esta vista.")
+                        st.info(f"Cliente: **{sel_cl}**")
+                        m1, m2 = st.columns(2)
+                        m1.metric("Total", f"${c_tot:,.0f}")
+                        m2.metric("Frecuencia", f"{freq:.1f} /sem")
+                        st.write(f"📅 Última: {c_last.strftime('%d-%m-%Y')}")
+                        if days > 7: st.error(f"🚨 Inactivo hace {days} días")
+                        else: st.success(f"✅ Activo")
+                else:
+                    st.warning("No hay clientes en este filtro.")
+
+            with cc2:
+                if 'cliente' in dff.columns and not dff['cliente'].empty and 'producto' in dff.columns and sel_cl:
+                    st.markdown(f"#### 📦 ¿Qué compra {sel_cl}?")
+                    top_p_client = c_dat.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(10).reset_index()
+                    fig_cl_prod = px.bar(top_p_client, x='monto_real', y='producto', orientation='h', text_auto='.2s', color='monto_real', color_continuous_scale='Teal')
+                    st.plotly_chart(fig_cl_prod, use_container_width=True)
+            
+            # Alerta de Fuga
+            st.markdown("---")
+            if 'cliente' in dff.columns and not dff['cliente'].empty:
+                st.markdown("#### 🚨 Alerta de Fuga (Churn)")
+                w1_end = df_v['fecha'].min() + datetime.timedelta(days=7)
+                w_last = df_v['fecha'].max() - datetime.timedelta(days=7)
+                start_cl = set(dff[dff['fecha'] <= w1_end]['cliente'].unique())
+                end_cl = set(dff[dff['fecha'] >= w_last]['cliente'].unique())
+                churn = list(start_cl - end_cl)
+                risk_df = dff[dff['cliente'].isin(churn)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False)
+                st.error(f"⚠️ {len(churn)} Clientes no recompraron la última semana")
+                st.dataframe(risk_df.head(10), use_container_width=True)
+
+        # 6. AUDITORÍA
+        with tabs[5]:
+            st.header("🕵️ Mapa de Oportunidades (Gaps)")
+            if not dff.empty:
+                if 'jerarquia1' in dff.columns: cat = 'jerarquia1'
+                else: cat = 'categoria'
+                pivot = dff.groupby(['vendedor', cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=cat, values='monto_real').fillna(0)
+                st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
+            else: st.warning("No hay datos para esta vista.")
+
+        # 7. INTELIGENCIA
+        with tabs[6]:
+            st.header("🧠 Recomendador")
+            if not dff.empty and 'producto' in dff.columns and 'id_transaccion' in dff.columns:
+                st.subheader("Cross-Selling (Productos relacionados)")
+                prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
+                sel_p = st.selectbox("Si el cliente lleva...", prods)
+                if sel_p:
+                    txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
+                    sub = dff[dff['id_transaccion'].isin(txs)]
+                    sub = sub[sub['producto'] != sel_p]
+                    if not sub.empty:
+                        rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
+                        st.success("👉 Ofrécele también:")
+                        st.table(rel.set_index('producto'))
+                    else: st.info("No se encontraron productos relacionados en las transacciones.")
+            else: st.warning("No hay datos suficientes para esta vista.")
 
 
 else:
-    # 🚨 ERROR SI NO ENCUENTRA EL ARCHIVO PRINCIPAL
     st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
-    st.markdown("""
-        **Verifica en tu repositorio de GitHub:**
-        1.  El archivo **`venta_completa.csv`** existe.
-        2.  Debe estar en formato CSV.
-    """)
