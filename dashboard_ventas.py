@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v23.0", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v24.0", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -21,7 +21,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNCIÓN: BUSCADOR DE ARCHIVOS (CASE INSENSITIVE) ---
+# --- FUNCIÓN: BUSCADOR DE ARCHIVOS ---
 def find_file_fuzzy(keywords):
     current_files = os.listdir('.')
     for f in current_files:
@@ -33,10 +33,9 @@ def find_file_fuzzy(keywords):
 @st.cache_data
 def load_consolidated_data():
     
-    # 1. BUSCAR ARCHIVOS (Inteligente)
     file_venta = find_file_fuzzy(['venta', 'completa'])
     file_preventa = find_file_fuzzy(['preventa'])
-    file_maestro = find_file_fuzzy(['maestro', 'cliente']) # Busca Maestro... o maestro...
+    file_maestro = find_file_fuzzy(['maestro', 'cliente'])
     
     df_v, df_p, df_a = None, None, None
     
@@ -54,7 +53,7 @@ def load_consolidated_data():
                 except: continue
         return None
 
-    # CARGAR VENTA
+    # 1. CARGAR VENTA
     if file_venta:
         df_v = read_smart(file_venta)
         if df_v is not None and 'fecha' in df_v.columns:
@@ -70,7 +69,6 @@ def load_consolidated_data():
             
             df_v['id_transaccion'] = df_v.get('ventaid', df_v.columns[0])
             
-            # Canal Default
             cat_map = {
                 'JOSE CARLOS MENDOZA MENDOZA': '1. MAYORISTAS', 'KEVIN  COLODRO VACA': '1. MAYORISTAS',
                 'MARCIA MARAZ MONTAÑO': '1. MAYORISTAS', 'ABDY JOSE RUUD': '1. MAYORISTAS',
@@ -79,19 +77,20 @@ def load_consolidated_data():
             }
             df_v['canal'] = df_v['vendedor'].map(cat_map).fillna('6. RUTA TDB')
 
-    # CARGAR MAESTRO
+    # 2. CARGAR MAESTRO
     if file_maestro:
         df_a = read_smart(file_maestro)
         if df_a is not None:
             col_id = next((c for c in df_a.columns if 'cliente' in c and 'id' in c), None)
             col_vend = next((c for c in df_a.columns if 'vendedor' in c), None)
+            
             if col_id and col_vend:
                 df_a = df_a.rename(columns={col_id: 'clienteid', col_vend: 'vendedor'})
                 df_a['clienteid'] = df_a['clienteid'].astype(str)
                 df_a['vendedor'] = df_a['vendedor'].astype(str).str.strip()
                 df_a = df_a[['clienteid', 'vendedor']].drop_duplicates(subset=['clienteid'])
 
-    # CARGAR PREVENTA
+    # 3. CARGAR PREVENTA
     if file_preventa:
         df_p = read_smart(file_preventa)
         if df_p is not None and 'fecha' in df_p.columns:
@@ -99,7 +98,6 @@ def load_consolidated_data():
             if 'monto_final' in df_p.columns: df_p['monto_pre'] = df_p['monto_final']
             elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
             else: df_p['monto_pre'] = 0
-            
             col_pre = next((c for c in df_p.columns if 'nro' in c and 'preventa' in c), None)
             if col_pre: df_p['id_cruce'] = df_p[col_pre]
 
@@ -114,19 +112,17 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v23.0")
-    st.info("Sistema Full Restaurado")
+    st.title("💎 Master Dashboard v24.0")
+    st.info("Sistema Full")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
 df_v, df_p, df_a = load_consolidated_data()
 
 if df_v is not None:
-    # FILTROS
     sel_canal = st.multiselect("Filtro Canal", df_v['canal'].unique(), default=df_v['canal'].unique())
     dff = df_v[df_v['canal'].isin(sel_canal)].copy()
     
-    # KPIs
     tot = dff['monto_real'].sum()
     cob = dff['clienteid'].nunique()
     trx = dff['id_transaccion'].nunique()
@@ -149,7 +145,6 @@ if df_v is not None:
 
     st.markdown("---")
     
-    # PESTAÑAS (TODAS RESTAURADAS)
     tabs = st.tabs(["🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
     
     # 1. PENETRACIÓN
@@ -158,170 +153,149 @@ if df_v is not None:
             st.header("🎯 Penetración de Cartera")
             v_list = dff['vendedor'].unique()
             df_a_filt = df_a[df_a['vendedor'].isin(v_list)]
-            
             asig = df_a_filt.groupby('vendedor')['clienteid'].nunique().reset_index(name='Asignados')
             serv = dff.groupby('vendedor')['clienteid'].nunique().reset_index(name='Servidos')
-            
             pen = pd.merge(asig, serv, on='vendedor', how='left').fillna(0)
             pen['% Pen'] = (pen['Servidos']/pen['Asignados'].replace(0,1))*100
             pen['Gap'] = pen['Asignados'] - pen['Servidos']
             
             st.dataframe(pen.sort_values('% Pen', ascending=False).style.format({'% Pen': '{:.1f}%'}), use_container_width=True)
-            
             fig = go.Figure(data=[
                 go.Bar(name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', marker_color='#2ECC71'),
                 go.Bar(name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', marker_color='#E74C3C')
             ])
-            fig.update_layout(barmode='stack', height=500, title="Cobertura de Cartera (Asignados vs Servidos)")
+            fig.update_layout(barmode='stack', height=500)
             st.plotly_chart(fig, use_container_width=True)
-        else: st.warning("Carga 'Maestro_de_clientes.csv' para ver esto.")
+        else: st.warning("Carga 'Maestro_de_clientes.csv'.")
 
     # 2. CAÍDA
     with tabs[1]:
-        if df_p is not None and 'id_cruce' in df_p.columns:
+        if df_p is not None:
             st.header("📉 Análisis de Rechazos")
             ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
             pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
             m = pd.merge(pre_g, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m['diff'] = m['monto_pre'] - m['monto_real']
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
-            
             c1, c2 = st.columns(2)
             c1.plotly_chart(px.pie(m, names='st', values='monto_pre', title="Estatus ($)"), use_container_width=True)
             
             m_det = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="$$ Perdidos por Vendedor", color='caida', color_continuous_scale='Reds'), use_container_width=True)
-        else: st.warning("Faltan datos de Preventa para este análisis.")
+            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", color='caida', color_continuous_scale='Reds'), use_container_width=True)
+        else: st.warning("Carga 'preventa_completa.csv'.")
 
     # 3. SIMULADOR
     with tabs[2]:
         st.header("🎮 Simulador")
-        if not dff.empty:
-            dl = max(0, 30 - df_v['fecha'].max().day)
-            c1, c2 = st.columns(2)
-            dt = c1.slider("Subir Ticket %", 0, 50, 0)
-            dc = c2.slider("Subir Cobertura %", 0, 50, 0)
-            
-            d_avg = tot / df_v['fecha'].max().day
-            proj = tot + (d_avg * (1+dt/100) * (1+dc/100) * dl)
-            st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
+        dl = max(0, 30 - df_v['fecha'].max().day)
+        c1, c2 = st.columns(2)
+        dt = c1.slider("Subir Ticket %", 0, 50, 0)
+        dc = c2.slider("Subir Cobertura %", 0, 50, 0)
+        d_avg = tot / df_v['fecha'].max().day
+        proj = tot + (d_avg * (1+dt/100) * (1+dc/100) * dl)
+        st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
 
-    # 4. ESTRATEGIA (RESTAURADO GRÁFICO COMBO GRANDE)
+    # 4. ESTRATEGIA
     with tabs[3]:
         st.header("📈 Estrategia")
-        if not dff.empty and 'clienteid' in dff.columns:
-            day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
-            
-            # Combo Chart
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
-            fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Cobertura (Clientes)', yaxis='y2', line=dict(color='#3498DB', width=3), mode='lines+markers'))
-            
-            fig.update_layout(
-                title="Evolución Venta ($) vs Cobertura (Clientes)",
-                yaxis=dict(title="Venta ($)", showgrid=False),
-                yaxis2=dict(title="Clientes Únicos", overlaying='y', side='right', showgrid=False),
-                plot_bgcolor='white', height=600 # GRANDE
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("---")
-            st.subheader("Jerarquía de Canales")
-            sun = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
-            fig_sun = px.sunburst(sun, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues')
-            fig_sun.update_layout(height=600)
-            st.plotly_chart(fig_sun, use_container_width=True)
+        day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6'))
+        fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3)))
+        fig.update_layout(yaxis2=dict(overlaying='y', side='right'), title="Venta vs Clientes", height=600)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        sun = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
+        st.plotly_chart(px.sunburst(sun, path=['canal', 'vendedor'], values='monto_real'), use_container_width=True)
 
     # 5. FINANZAS
     with tabs[4]:
         st.header("💳 Finanzas")
-        if not dff.empty:
-            pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
-            st.plotly_chart(px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago"), use_container_width=True)
-            
-            if 'Crédito' in pay['tipopago'].values:
-                cred = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
-                st.write("Top Vendedores Crédito")
-                st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
+        pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
+        st.plotly_chart(px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago"), use_container_width=True)
+        if 'Crédito' in pay['tipopago'].values:
+            cred = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
+            st.write("Top Crédito")
+            st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
 
-    # 6. CLIENTES (RESTAURADO BUSCADOR COMPLETO)
+    # 6. CLIENTES
     with tabs[5]:
         st.header("👥 Clientes 360°")
-        if not dff.empty and 'cliente' in dff.columns:
-            c1, c2 = st.columns([1, 2])
-            
-            # Mapa Nombre -> ID
+        c1, c2 = st.columns([1, 2])
+        if 'cliente' in dff.columns:
             cli_map = dff[['cliente', 'clienteid']].drop_duplicates().set_index('cliente')['clienteid'].to_dict()
             cl_sel = c1.selectbox("Buscar Cliente:", sorted(cli_map.keys()))
-            
             if cl_sel:
                 cid = cli_map[cl_sel]
                 cd = dff[dff['clienteid'] == cid]
-                
                 ctot = cd['monto_real'].sum()
                 weeks = cd['semana_anio'].nunique()
                 freq = cd['id_transaccion'].nunique() / weeks if weeks>0 else 0
-                
                 c1.info(f"{cl_sel}")
                 c1.metric("Total", f"${ctot:,.0f}")
                 c1.metric("Frecuencia", f"{freq:.1f} /sem")
-                
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
-                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos", color_discrete_sequence=['#34495E']), use_container_width=True)
-            
-            st.markdown("---")
-            # Fuga
-            w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
-            wl = df_v['fecha'].max() - datetime.timedelta(days=7)
-            s_cl = set(dff[dff['fecha']<=w1]['clienteid'])
-            e_cl = set(dff[dff['fecha']>=wl]['clienteid'])
-            churn = list(s_cl - e_cl)
-            
-            st.error(f"⚠️ {len(churn)} Clientes en Riesgo (Fuga)")
+                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos"), use_container_width=True)
+        
+        w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
+        wl = df_v['fecha'].max() - datetime.timedelta(days=7)
+        churn = list(set(dff[dff['fecha']<=w1]['clienteid']) - set(dff[dff['fecha']>=wl]['clienteid']))
+        st.error(f"⚠️ {len(churn)} Clientes en Riesgo (Fuga)")
+        if churn:
             churn_df = dff[dff['clienteid'].isin(churn)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False)
             st.dataframe(churn_df.head(10), use_container_width=True)
 
-    # 7. AUDITORIA (RESTAURADOS FILTROS MÚLTIPLES)
+    # 7. AUDITORIA (CORREGIDO CON JERARQUIA 2 Y 3)
     with tabs[6]:
-        st.header("🔍 Auditoría")
-        if not dff.empty:
+        st.header("🔍 Auditoría & Oportunidades")
+        
+        cf1, cf2, cf3 = st.columns(3)
+        
+        # Preparar opciones (Manejo seguro)
+        j1_o = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
+        j2_o = sorted(dff['jerarquia2'].dropna().unique()) if 'jerarquia2' in dff.columns else []
+        j3_o = sorted(dff['jerarquia3'].dropna().unique()) if 'jerarquia3' in dff.columns else []
+        cat_o = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
+        prod_o = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
+        
+        with cf1:
+            s_j1 = st.multiselect("Jerarquía 1", j1_o)
+            s_cat = st.multiselect("Categoría", cat_o)
+        with cf2:
+            s_j2 = st.multiselect("Jerarquía 2", j2_o)
+            s_prod = st.multiselect("Producto", prod_o)
+        with cf3:
+            s_j3 = st.multiselect("Jerarquía 3", j3_o)
             
-            # Filtros de Auditoría
-            cf1, cf2, cf3 = st.columns(3)
-            
-            # Listas seguras
-            j1_l = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
-            j2_l = sorted(dff['jerarquia2'].dropna().unique()) if 'jerarquia2' in dff.columns else []
-            j3_l = sorted(dff['jerarquia3'].dropna().unique()) if 'jerarquia3' in dff.columns else []
-            cat_l = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
-            prod_l = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
-
-            s_j1 = cf1.multiselect("Jerarquía 1", j1_l)
-            s_cat = cf2.multiselect("Categoría", cat_l)
-            s_prod = cf3.multiselect("Producto", prod_l)
-            
-            # Aplicar filtros localmente
-            df_aud = dff.copy()
-            if s_j1: df_aud = df_aud[df_aud['jerarquia1'].isin(s_j1)]
-            if s_cat: df_aud = df_aud[df_aud['categoria'].isin(s_cat)]
-            if s_prod: df_aud = df_aud[df_aud['producto'].isin(s_prod)]
-            
-            # Heatmap Dinámico
-            col_hm = 'producto' if s_prod else ('categoria' if s_cat else 'jerarquia1')
-            
-            if col_hm in df_aud.columns:
-                st.subheader(f"Mapa de Calor: Vendedor vs {col_hm}")
-                piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
-                st.plotly_chart(px.imshow(piv, aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
-            else:
-                st.warning("Faltan columnas de jerarquía en el archivo.")
+        # Aplicar filtros en cascada
+        df_aud = dff.copy()
+        if s_j1: df_aud = df_aud[df_aud['jerarquia1'].isin(s_j1)]
+        if s_j2: df_aud = df_aud[df_aud['jerarquia2'].isin(s_j2)]
+        if s_j3: df_aud = df_aud[df_aud['jerarquia3'].isin(s_j3)]
+        if s_cat: df_aud = df_aud[df_aud['categoria'].isin(s_cat)]
+        if s_prod: df_aud = df_aud[df_aud['producto'].isin(s_prod)]
+        
+        # Decidir nivel de detalle del Heatmap
+        col_hm = 'jerarquia1'
+        if s_prod: col_hm = 'producto'
+        elif s_cat: col_hm = 'categoria'
+        elif s_j3: col_hm = 'jerarquia3'
+        elif s_j2: col_hm = 'jerarquia2'
+        elif s_j1: col_hm = 'jerarquia1'
+        
+        if col_hm in df_aud.columns and not df_aud.empty:
+            st.subheader(f"Mapa de Calor: Vendedor vs {col_hm}")
+            piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
+            st.plotly_chart(px.imshow(piv, aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
+        else:
+            st.warning("No hay datos con los filtros seleccionados.")
 
     # 8. INTELIGENCIA
     with tabs[7]:
         st.header("🧠 Inteligencia")
-        if not dff.empty and 'producto' in dff.columns:
+        if 'producto' in dff.columns:
             tops = dff.groupby('producto')['monto_real'].sum().nlargest(50).index
             p_sel = st.selectbox("Si lleva...", tops)
             if p_sel:
@@ -331,4 +305,4 @@ if df_v is not None:
                 st.table(rel)
 
 else:
-    st.error("🚨 ERROR: No se encontraron archivos. Verifica 'venta_completa.csv' en GitHub.")
+    st.error("🚨 ERROR: No se encontró 'venta_completa.csv' en GitHub.")
