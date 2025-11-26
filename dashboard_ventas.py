@@ -214,37 +214,41 @@ if df_v is not None:
     with tabs[2]:
         st.header("📈 Estrategia y Visión Macro")
         if not dff.empty and 'clienteid' in dff.columns:
-            c_m1, c_m2 = st.columns([2, 1])
-            with c_m1:
-                st.subheader("Venta vs Penetración (Combo Chart)")
-                
-                daily = dff.groupby('fecha').agg({
-                    'monto_real':'sum',
-                    'clienteid':'nunique'
-                }).reset_index()
-                
-                fig_combo = go.Figure()
-                fig_combo.add_trace(go.Bar(x=daily['fecha'], y=daily['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
-                
-                fig_combo.add_trace(go.Scatter(
-                    x=daily['fecha'], 
-                    y=daily['clienteid'],
-                    name='Cobertura (Clientes)', 
-                    yaxis='y2', 
-                    line=dict(color='#3498DB', width=3),
-                    mode='lines+markers'
-                ))
-                
-                fig_combo.update_layout(
-                    yaxis=dict(title="Venta ($)", showgrid=False),
-                    yaxis2=dict(title="Cobertura (Clientes)", overlaying='y', side='right', showgrid=False),
-                    plot_bgcolor='white', height=700, title="Evolución Venta vs Clientes Únicos" # ALTURA A 700PX
-                )
-                st.plotly_chart(fig_combo, use_container_width=True)
-            with c_m2:
-                st.subheader("Jerarquía (Sunburst)")
-                sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
-                st.plotly_chart(px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues'), use_container_width=True)
+            
+            # --- COMBO CHART (TENDENCIA) ---
+            st.subheader("Venta vs Penetración (Combo Chart)")
+            daily = dff.groupby('fecha').agg({
+                'monto_real':'sum',
+                'clienteid':'nunique'
+            }).reset_index()
+            
+            fig_combo = go.Figure()
+            fig_combo.add_trace(go.Bar(x=daily['fecha'], y=daily['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
+            fig_combo.add_trace(go.Scatter(
+                x=daily['fecha'], 
+                y=daily['clienteid'],
+                name='Cobertura (Clientes)', 
+                yaxis='y2', 
+                line=dict(color='#3498DB', width=3),
+                mode='lines+markers'
+            ))
+            
+            fig_combo.update_layout(
+                yaxis=dict(title="Venta ($)", showgrid=False),
+                yaxis2=dict(title="Cobertura (Clientes)", overlaying='y', side='right', showgrid=False),
+                plot_bgcolor='white', height=700, title="Evolución Venta vs Clientes Únicos" # ALTURA A 700PX
+            )
+            st.plotly_chart(fig_combo, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # --- SUNBURST (JERARQUÍA ABAJO) ---
+            st.subheader("Jerarquía de Ventas (Sunburst)")
+            sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
+            fig_sun = px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues')
+            fig_sun.update_layout(height=600, margin=dict(t=0, l=0, r=0, b=0)) # Altura ajustada para full width
+            st.plotly_chart(fig_sun, use_container_width=True)
+            
         else: st.warning("No hay datos para esta vista.")
 
     # 4. FINANZAS
