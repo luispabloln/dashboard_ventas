@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v29.0", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="Master Sales Command v30.0", page_icon="🌍", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -85,7 +85,6 @@ def load_consolidated_data():
                 df_a['clienteid'] = df_a['clienteid'].astype(str)
                 df_a['vendedor'] = df_a['vendedor'].astype(str).str.strip()
                 
-                # Limpieza GEO
                 if 'latitud' in df_a.columns and 'longitud' in df_a.columns:
                     df_a['latitud'] = pd.to_numeric(df_a['latitud'].astype(str).str.replace(',', '.'), errors='coerce')
                     df_a['longitud'] = pd.to_numeric(df_a['longitud'].astype(str).str.replace(',', '.'), errors='coerce')
@@ -115,8 +114,8 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v29.0")
-    st.success("Módulo Geo + Tabla Detalle")
+    st.title("💎 Master Dashboard v30.0")
+    st.success("GPS Activado")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
@@ -151,10 +150,10 @@ if df_v is not None:
     
     tabs = st.tabs(["🗺️ Mapa Ruta", "🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 0. MAPA DE RUTA (CON TABLA DE DETALLE)
+    # 0. MAPA DE RUTA (CON NAVEGACIÓN GPS)
     with tabs[0]:
         if df_a is not None and 'latitud' in df_a.columns:
-            st.header("🗺️ Mapa de Cobertura")
+            st.header("🗺️ Mapa de Cobertura y Navegación")
             c_m1, c_m2 = st.columns([1, 3])
             
             with c_m1:
@@ -170,7 +169,6 @@ if df_v is not None:
             
             with c_m2:
                 if not df_map.empty:
-                    # Cruzar con ventas para status
                     clients_buy = set(dff['clienteid'].unique())
                     df_map['Status'] = df_map['clienteid'].apply(lambda x: 'Con Compra' if x in clients_buy else 'Sin Compra')
                     
@@ -178,35 +176,39 @@ if df_v is not None:
                     fig_map = px.scatter_mapbox(
                         df_map, lat="latitud", lon="longitud", color="Status",
                         color_discrete_map={'Con Compra': '#2ECC71', 'Sin Compra': '#E74C3C'},
-                        hover_name="cliente", hover_data={"vendedor": True, "clienteid": True}, zoom=12,
-                        title=f"Mapa: {len(df_map)} Clientes ({len(df_map[df_map['Status']=='Con Compra'])} Efectivos)"
+                        hover_name="cliente", hover_data={"vendedor": True}, zoom=12,
+                        title=f"Mapa: {len(df_map)} Clientes"
                     )
                     fig_map.update_layout(mapbox_style="open-street-map", height=500)
                     st.plotly_chart(fig_map, use_container_width=True)
                     
-                    # 2. LA TABLA DE DETALLE (NUEVO)
+                    # 2. TABLA CON LINK DE NAVEGACIÓN
                     st.markdown("---")
-                    st.subheader("📋 Detalle de Clientes en Mapa")
+                    st.subheader("🚀 Lista de Ruta (Clic para Navegar)")
                     
-                    # Seleccionar columnas relevantes
-                    cols_to_show = ['vendedor', 'clienteid', 'cliente', 'Status']
-                    if 'dia' in df_map.columns: cols_to_show.append('dia')
+                    # Crear columna con el link de Google Maps
+                    df_map['Navegación GPS'] = df_map.apply(
+                        lambda row: f"https://www.google.com/maps/dir/?api=1&destination={row['latitud']},{row['longitud']}", axis=1
+                    )
                     
-                    # Crear dataframe limpio para la tabla
-                    df_table = df_map[cols_to_show].sort_values(by=['Status', 'cliente'], ascending=[True, True])
+                    cols_show = ['clienteid', 'cliente', 'Status', 'Navegación GPS']
+                    if 'dia' in df_map.columns: cols_show.insert(1, 'dia')
                     
-                    # Colorear la tabla visualmente
-                    def highlight_status(val):
-                        color = '#d4edda' if val == 'Con Compra' else '#f8d7da'
-                        return f'background-color: {color}'
-                    
+                    # Usar column_config para renderizar el link como botón
                     st.dataframe(
-                        df_table.style.applymap(highlight_status, subset=['Status']),
-                        use_container_width=True
+                        df_map[cols_show].sort_values('Status'),
+                        column_config={
+                            "Navegación GPS": st.column_config.LinkColumn(
+                                "Ir al Cliente",
+                                display_text="📍 Abrir Mapa"
+                            )
+                        },
+                        use_container_width=True,
+                        hide_index=True
                     )
                     
                 else:
-                    st.info("Selecciona filtros para ver el mapa.")
+                    st.info("Selecciona filtros para ver la ruta.")
         else:
             st.warning("El archivo Maestro no tiene columnas 'Latitud' y 'Longitud'.")
 
@@ -246,12 +248,12 @@ if df_v is not None:
             m['diff'] = m['monto_pre'] - m['monto_real']
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
             c1, c2 = st.columns(2)
-            c1.plotly_chart(px.pie(m, names='st', values='monto_pre', title="Estatus"), use_container_width=True)
+            c1.plotly_chart(px.pie(m, names='st', values='monto_pre', title="Estatus ($)"), use_container_width=True)
             
             m_det = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="$$ Perdidos", color='caida', color_continuous_scale='Reds'), use_container_width=True)
+            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", text='caida', color='caida', color_continuous_scale='Reds'), use_container_width=True)
         else: st.warning("Carga Preventas.")
 
     # 3. SIMULADOR
@@ -263,14 +265,14 @@ if df_v is not None:
         dc = c2.slider("Subir Cobertura %", 0, 50, 0)
         d_avg = tot / df_v['fecha'].max().day
         proj = tot + (d_avg * (1+dt/100) * (1+dc/100) * dl)
-        st.metric("Proyección", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
+        st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
 
     # 4. ESTRATEGIA
     with tabs[4]:
         st.header("📈 Estrategia")
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}'))
+        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'))
         fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3), mode='lines+markers+text', text=day['clienteid'], textposition='top center'))
         fig.update_layout(yaxis2=dict(overlaying='y', side='right'), title="Venta vs Clientes", height=600)
         st.plotly_chart(fig, use_container_width=True)
@@ -305,7 +307,12 @@ if df_v is not None:
                 c1.metric("Total", f"${ctot:,.0f}")
                 c1.metric("Frecuencia", f"{freq:.1f} /sem")
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
-                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos"), use_container_width=True)
+                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos", text='monto_real'), use_container_width=True)
+        
+        w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
+        wl = df_v['fecha'].max() - datetime.timedelta(days=7)
+        churn = list(set(dff[dff['fecha']<=w1]['clienteid']) - set(dff[dff['fecha']>=wl]['clienteid']))
+        st.error(f"⚠️ {len(churn)} Clientes en Riesgo")
 
     # 7. AUDITORIA
     with tabs[7]:
