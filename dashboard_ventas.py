@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v19.1", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v19.2", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -93,7 +93,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v19.1")
+    st.title("💎 Master Dashboard v19.2")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -218,19 +218,17 @@ if df_v is not None:
             with c_m1:
                 st.subheader("Venta vs Penetración (Combo Chart)")
                 
-                # CÁLCULO DE DATOS PARA EL COMBO CHART (USANDO CLIENTEID)
                 daily = dff.groupby('fecha').agg({
                     'monto_real':'sum',
-                    'clienteid':'nunique' # Cobertura
+                    'clienteid':'nunique'
                 }).reset_index()
                 
                 fig_combo = go.Figure()
                 fig_combo.add_trace(go.Bar(x=daily['fecha'], y=daily['monto_real'], name='Venta ($)', marker_color='#95A5A6', opacity=0.6))
                 
-                # LÍNEA DE COBERTURA
                 fig_combo.add_trace(go.Scatter(
                     x=daily['fecha'], 
-                    y=daily['clienteid'], # USANDO CLIENTEID
+                    y=daily['clienteid'],
                     name='Cobertura (Clientes)', 
                     yaxis='y2', 
                     line=dict(color='#3498DB', width=3),
@@ -240,7 +238,7 @@ if df_v is not None:
                 fig_combo.update_layout(
                     yaxis=dict(title="Venta ($)", showgrid=False),
                     yaxis2=dict(title="Cobertura (Clientes)", overlaying='y', side='right', showgrid=False),
-                    plot_bgcolor='white', height=400, title="Evolución Venta vs Clientes Únicos"
+                    plot_bgcolor='white', height=550, title="Evolución Venta vs Clientes Únicos" # Altura ajustada
                 )
                 st.plotly_chart(fig_combo, use_container_width=True)
             with c_m2:
@@ -261,7 +259,7 @@ if df_v is not None:
                 cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
                 if not cred_df.empty:
                     cred_rank = cred_df.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10).reset_index()
-                    cred_rank.columns = ['vendedor', 'monto_real'] # Asegurar nombres
+                    cred_rank.columns = ['vendedor', 'monto_real'] # Asegurar nombres para el formato
                     st.dataframe(cred_rank.style.format({'monto_real': '${:,.0f}'}), use_container_width=True)
                 else: st.info("No hay ventas a crédito en este filtro.")
         else: st.warning("No hay datos para esta vista.")
