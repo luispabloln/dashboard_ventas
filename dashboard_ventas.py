@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v18.1", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v18.2", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -94,7 +94,7 @@ def get_max_date_safe(df):
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v18.1")
+    st.title("💎 Master Dashboard v18.2")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -111,10 +111,7 @@ if df_v is not None:
     
     # KPIs Globales
     tot = dff['monto_real'].sum()
-    
-    # Cobertura usando CLIENTEID
-    cobertura = dff['clienteid'].nunique()
-    
+    cobertura = dff['clienteid'].nunique() # COBERTURA OK
     trx = dff['id_transaccion'].nunique()
     ticket = tot / trx if trx > 0 else 0
 
@@ -131,7 +128,7 @@ if df_v is not None:
     with c2:
         k1, k2, k3 = st.columns(3)
         k1.metric("Ventas Totales", f"${tot:,.0f}")
-        k2.metric("Cobertura", f"{cobertura} Clientes") # AHORA CON CLIENTEID
+        k2.metric("Cobertura", f"{cobertura} Clientes")
         k3.metric("Ticket Promedio", f"${ticket:,.0f}")
         
         if df_p is not None:
@@ -160,14 +157,64 @@ if df_v is not None:
     # --- PESTAÑAS (TODAS FUNCIONALES) ---
     tabs = st.tabs(["📉 Análisis Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 1. ANÁLISIS CAÍDA (omitted for brevity)
+    # 1. ANÁLISIS CAÍDA
+    with tabs[0]:
+        if df_p is not None and not dff.empty:
+            st.header("📉 Análisis de Eficiencia Logística y Comercial")
+            
+            ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
+            pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
+            merge_detail = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
+            merge_detail['caida_val'] = merge_detail['monto_pre'] - merge_detail['monto_real']
+            
+            c_f1, c_f2 = st.columns(2)
+            with c_f1:
+                v_agg = merge_detail.groupby('vendedor').agg(
+                    total_pre=('monto_pre', 'sum'),
+                    total_caida=('caida_val', 'sum')
+                ).reset_index()
+                v_agg['% Caída'] = (v_agg['total_caida'] / v_agg['total_pre']) * 100
+                
+                st.subheader("Top Vendedores con Mayor % de Pedidos Caídos")
+                drop_vend = v_agg.sort_values(by='% Caída', ascending=False).head(10)
+                st.dataframe(drop_vend.style.format({'total_pre': '${:,.0f}', 'total_caida': '${:,.0f}', '% Caída': '{:.1f}%'}), use_container_width=True)
+            
+            with c_f2:
+                st.subheader("Productos No Entregados (Quiebres de Stock)")
+                prod_drop = merge_detail.groupby('producto')['caida_val'].sum().sort_values(ascending=False).head(10).reset_index()
+                st.dataframe(prod_drop.style.format({'caida_val': '${:,.2f}'}), use_container_width=True)
+        else:
+            st.warning("Carga el archivo 'preventa_completa.csv' y asegúrate de que el filtro no esté vacío.")
 
-    # 2. SIMULADOR (omitted for brevity)
+    # 2. SIMULADOR
+    with tabs[1]:
+        st.header("🎮 Simulador de Cierre")
+        if not dff.empty:
+            col_sim_input, col_sim_res = st.columns([1, 2])
+            with col_sim_input:
+                st.markdown('<div class="metric-card"><h5>🎛️ Ajustes</h5>', unsafe_allow_html=True)
+                days_left = max(0, 30 - dff['fecha'].max().day)
+                st.info(f"Días restantes: {days_left}")
+                delta_ticket = st.slider("Subir Ticket (%)", 0, 50, 0)
+                delta_clientes = st.slider("Subir Cobertura (%)", 0, 50, 0)
+                st.markdown('</div>', unsafe_allow_html=True)
+            with col_sim_res:
+                days_available = dff['fecha'].nunique()
+                daily_avg = tot / days_available if days_available > 0 else 0
+                proj_natural = tot + (daily_avg * days_left)
+                proj_sim = tot + (daily_avg * (1+delta_ticket/100) * (1+delta_clientes/100) * days_left)
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Cierre Natural", f"${proj_natural:,.0f}")
+                m2.metric("Cierre Simulado", f"${proj_sim:,.0f}", delta=f"+${proj_sim-proj_natural:,.0f}")
+                m3.metric("vs Meta", f"${proj_sim - meta:,.0f}")
+        else:
+            st.warning("No hay datos para simular.")
 
     # 3. ESTRATEGIA (CON COMBO CHART CORREGIDO)
     with tabs[2]:
         st.header("📈 Estrategia y Visión Macro")
-        if not dff.empty and 'clienteid' in dff.columns: # Agregamos el check de clienteid
+        if not dff.empty and 'clienteid' in dff.columns:
             c_m1, c_m2 = st.columns([2, 1])
             with c_m1:
                 st.subheader("Venta vs Penetración (Combo Chart)")
@@ -201,15 +248,107 @@ if df_v is not None:
                 st.subheader("Jerarquía (Sunburst)")
                 sun_df = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
                 st.plotly_chart(px.sunburst(sun_df, path=['canal', 'vendedor'], values='monto_real', color='monto_real', color_continuous_scale='Blues'), use_container_width=True)
-        else: st.warning("No hay datos para esta vista o falta la columna clienteid.")
-        
-    # [El resto de las pestañas debe ser copiado desde la versión v17.4, pero se omite para brevedad y foco]
-    with tabs[0]: st.info("Módulo Análisis Caída activo.")
-    with tabs[1]: st.info("Módulo Simulador activo.")
-    with tabs[3]: st.info("Módulo Finanzas activo.")
-    with tabs[4]: st.info("Módulo Clientes 360 activo.")
-    with tabs[5]: st.info("Módulo Auditoría activo.")
-    with tabs[6]: st.info("Módulo Inteligencia activo.")
+        else: st.warning("No hay datos para esta vista.")
+
+    # 4. FINANZAS
+    with tabs[3]:
+        st.header("💳 Salud Financiera")
+        if not dff.empty:
+            pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
+            cp1, cp2 = st.columns(2)
+            with cp1: st.plotly_chart(px.pie(pay, values='monto_real', names='tipopago', title="Mix Cobranza"), use_container_width=True)
+            with cp2:
+                st.write("Ranking Crédito")
+                cred_df = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
+                if not cred_df.empty:
+                    st.dataframe(cred_rank.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10), use_container_width=True)
+                else: st.info("No hay ventas a crédito en este filtro.")
+        else: st.warning("No hay datos para esta vista.")
+
+    # 5. CLIENTES
+    with tabs[4]:
+        st.header("👥 Gestión de Clientes 360°")
+        if not dff.empty:
+            cc1, cc2 = st.columns([1, 2])
+            with cc1:
+                st.markdown("#### 🔎 Buscador Individual")
+                if 'cliente' in dff.columns and 'clienteid' in dff.columns and not dff['cliente'].empty:
+                    
+                    # Crear mapa de Nombre a ID para la búsqueda
+                    client_map_df = dff[['clienteid', 'cliente']].drop_duplicates()
+                    client_map = client_map_df.set_index('cliente')['clienteid'].to_dict()
+                    cl_list = sorted(client_map_df['cliente'].unique())
+                    
+                    sel_cl_name = st.selectbox("Seleccionar Cliente:", cl_list)
+                    
+                    if sel_cl_name:
+                        sel_cl_id = client_map[sel_cl_name] # Obtener ID Único
+                        c_dat = dff[dff['clienteid'] == sel_cl_id] # Filtrar por ID
+                        
+                        c_tot = c_dat['monto_real'].sum()
+                        c_last = c_dat['fecha'].max()
+                        days = (dff['fecha'].max() - c_last).days
+                        weeks = c_dat['semana_anio'].nunique()
+                        freq = c_dat['id_transaccion'].nunique() / weeks if weeks > 0 else 0
+
+                        st.info(f"Cliente: **{sel_cl_name}**")
+                        m1, m2 = st.columns(2)
+                        m1.metric("Total", f"${c_tot:,.0f}")
+                        m2.metric("Frecuencia", f"{freq:.1f} /sem")
+                        st.write(f"📅 Última: {c_last.strftime('%d-%m-%Y')}")
+                        if days > 7: st.error(f"🚨 Inactivo hace {days} días")
+                        else: st.success(f"✅ Activo")
+            
+            with cc2:
+                if 'cliente' in dff.columns and 'producto' in dff.columns and sel_cl_name:
+                    st.markdown(f"#### 📦 ¿Qué compra {sel_cl_name}?")
+                    top_p_client = c_dat.groupby('producto')['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False).head(10).reset_index()
+                    fig_cl_prod = px.bar(top_p_client, x='monto_real', y='producto', orientation='h', text_auto='.2s', color='monto_real', color_continuous_scale='Teal')
+                    st.plotly_chart(fig_cl_prod, use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("#### 🚨 Alerta de Fuga")
+            if 'clienteid' in dff.columns and not dff['clienteid'].empty:
+                w1_end = df_v['fecha'].min() + datetime.timedelta(days=7)
+                w_last = df_v['fecha'].max() - datetime.timedelta(days=7)
+                start_cl = set(dff[dff['fecha'] <= w1_end]['clienteid'].unique())
+                end_cl = set(dff[dff['fecha'] >= w_last]['clienteid'].unique())
+                churn_ids = list(start_cl - end_cl)
+                
+                risk_df_temp = dff[dff['clienteid'].isin(churn_ids)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index()
+                st.error(f"⚠️ {len(churn_ids)} Clientes no recompraron la última semana")
+                st.dataframe(risk_df_temp.sort_values('monto_real', ascending=False).head(10), use_container_width=True)
+            else: st.warning("No hay datos para esta vista.")
+
+        # 6. AUDITORÍA
+        with tabs[5]:
+            st.header("🕵️ Mapa de Oportunidades (Gaps)")
+            if not dff.empty:
+                if 'jerarquia1' in dff.columns: col_cat = 'jerarquia1'
+                else: col_cat = 'categoria'
+                pivot = dff.groupby(['vendedor', col_cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_cat, values='monto_real').fillna(0)
+                st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
+            else: st.warning("No hay datos para esta vista.")
+
+        # 7. INTELIGENCIA
+        with tabs[6]:
+            st.header("🧠 Recomendador")
+            if not dff.empty:
+                if 'producto' in dff.columns and 'id_transaccion' in dff.columns:
+                    st.subheader("Cross-Selling (Productos relacionados)")
+                    prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
+                    sel_p = st.selectbox("Si el cliente lleva...", prods)
+                    if sel_p:
+                        txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
+                        sub = dff[dff['id_transaccion'].isin(txs)]
+                        sub = sub[sub['producto'] != sel_p]
+                        if not sub.empty:
+                            rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
+                            st.success("👉 Ofrécele también:")
+                            st.table(rel.set_index('producto'))
+                        else: st.info("No se encontraron productos relacionados en las transacciones.")
+                else: st.warning("Faltan columnas 'producto' o 'id_transaccion'.")
+            else: st.warning("No hay datos suficientes para esta vista.")
 
 
 else:
