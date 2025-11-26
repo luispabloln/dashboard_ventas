@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v17.7", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v17.8 (Final)", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -66,6 +66,9 @@ def load_consolidated_data():
         df_p_raw = read_and_clean(PREVENTA_FILE)
         if df_p_raw is not None and 'fecha' in df_p_raw.columns:
             df_p = df_p_raw
+            # Forzar conversión de fecha con errores='coerce' para convertir malos datos a NaT
+            df_p['fecha'] = pd.to_datetime(df_p['fecha'], format='%d/%m/%Y', dayfirst=True, errors='coerce') 
+
             if 'monto final' in df_p.columns: df_p['monto_pre'] = df_p['monto final']
             elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
             else: df_p['monto_pre'] = 0
@@ -75,17 +78,23 @@ def load_consolidated_data():
 
 # --- FUNCIÓN PARA OBTENER FECHA MÁXIMA DE FORMA SEGURA ---
 def get_max_date_safe(df):
-    if df is not None and not df.empty and 'fecha' in df.columns and df['fecha'].notna().any():
-        try:
-            return df['fecha'].max().strftime('%d-%m-%Y')
-        except AttributeError:
-            return "Error de Formato"
+    if df is not None and not df.empty and 'fecha' in df.columns:
+        # 1. Filtrar solo fechas válidas (ignorar NaT que vienen de datos corruptos)
+        valid_dates = df['fecha'].dropna()
+        
+        if not valid_dates.empty:
+            try:
+                # 2. Calcular max y formatear
+                return valid_dates.max().strftime('%d-%m-%Y')
+            except AttributeError:
+                # Fallback si el máximo es NaT por alguna razón
+                return "Corrupción Grave"
     return "No disponible"
 
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v17.7")
+    st.title("💎 Master Dashboard v17.8")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -93,10 +102,6 @@ with st.sidebar:
 
 # Ejecución de carga
 df_v, df_p = load_consolidated_data()
-
-# CÁLCULOS DE FECHA FUERA DEL MAIN IF
-max_v_date = get_max_date_safe(df_v)
-max_p_date = get_max_date_safe(df_p)
 
 if df_v is not None:
     
@@ -112,6 +117,11 @@ if df_v is not None:
 
     # HEADER
     c1, c2 = st.columns([1, 2])
+    
+    # LÓGICA DEFENSIVA PARA MAX DATE
+    max_v_date = get_max_date_safe(df_v)
+    max_p_date = get_max_date_safe(df_p)
+
     with c1:
         fig_gauge = go.Figure(go.Indicator(
             mode = "gauge+number", value = tot,
@@ -133,15 +143,15 @@ if df_v is not None:
 
     st.markdown("---")
     
-    # --- REPORTE DE SINCRONIZACIÓN ---
+    # --- REPORTE DE SINCRONIZACIÓN (AQUÍ ESTÁ EL REPORTE SOLICITADO) ---
     st.subheader("✅ Estado de Sincronización de Datos")
     
-    if max_v_date == max_p_date and max_p_date != "No disponible":
+    if max_v_date != "No disponible" and max_p_date != "No disponible" and max_v_date == max_p_date:
         sync_message = f'<div class="alert-box alert-success">🟢 **Sincronización PERFECTA:** Ambas bases están al día hasta el **{max_v_date}**.</div>'
     elif max_v_date != "No disponible" or max_p_date != "No disponible":
-        sync_message = f'<div class="alert-box alert-warning">🟡 **Advertencia:** Venta (Final) al **{max_v_date}** vs. Preventa (Pedido) al **{max_p_date}**.</div>'
+        sync_message = f'<div class="alert-box alert-warning">🟡 **Advertencia:** Venta (Final) al **{max_v_date}** vs. Preventa (Pedido) al **{max_p_date}**. Revise la Preventa.</div>'
     else:
-        sync_message = '<div class="alert-box alert-danger">🔴 **ERROR CRÍTICO:** No se pudo cargar ninguna fecha válida.</div>'
+        sync_message = '<div class="alert-box alert-danger">🔴 **ERROR CRÍTICO:** No se pudo cargar ninguna fecha válida. Revise los archivos.</div>'
 
     st.markdown(sync_message, unsafe_allow_html=True)
     st.markdown("---")
@@ -266,7 +276,7 @@ if df_v is not None:
             with cc2:
                 if 'cliente' in dff.columns and not dff['cliente'].empty and 'producto' in dff.columns and sel_cl:
                     st.markdown(f"#### 📦 ¿Qué compra {sel_cl}?")
-                    top_p_client = c_dat.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(10).reset_index()
+                    top_p_client = c_dat.groupby('producto')['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False).head(10).reset_index()
                     fig_cl_prod = px.bar(top_p_client, x='monto_real', y='producto', orientation='h', text_auto='.2s', color='monto_real', color_continuous_scale='Teal')
                     st.plotly_chart(fig_cl_prod, use_container_width=True)
             
@@ -296,19 +306,21 @@ if df_v is not None:
         # 7. INTELIGENCIA
         with tabs[6]:
             st.header("🧠 Recomendador")
-            if not dff.empty and 'producto' in dff.columns and 'id_transaccion' in dff.columns:
-                st.subheader("Cross-Selling (Productos relacionados)")
-                prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
-                sel_p = st.selectbox("Si el cliente lleva...", prods)
-                if sel_p:
-                    txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
-                    sub = dff[dff['id_transaccion'].isin(txs)]
-                    sub = sub[sub['producto'] != sel_p]
-                    if not sub.empty:
-                        rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
-                        st.success("👉 Ofrécele también:")
-                        st.table(rel.set_index('producto'))
-                    else: st.info("No se encontraron productos relacionados en las transacciones.")
+            if not dff.empty:
+                if 'producto' in dff.columns and 'id_transaccion' in dff.columns:
+                    st.subheader("Cross-Selling (Productos relacionados)")
+                    prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
+                    sel_p = st.selectbox("Si el cliente lleva...", prods)
+                    if sel_p:
+                        txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
+                        sub = dff[dff['id_transaccion'].isin(txs)]
+                        sub = sub[sub['producto'] != sel_p]
+                        if not sub.empty:
+                            rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
+                            st.success("👉 Ofrécele también:")
+                            st.table(rel.set_index('producto'))
+                        else: st.info("No se encontraron productos relacionados en las transacciones.")
+                else: st.warning("Faltan columnas 'producto' o 'id_transaccion'.")
             else: st.warning("No hay datos suficientes para esta vista.")
 
 
