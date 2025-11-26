@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v28.0", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="Master Sales Command v29.0", page_icon="🌍", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -73,7 +73,7 @@ def load_consolidated_data():
             }
             df_v['canal'] = df_v['vendedor'].map(cat_map).fillna('6. RUTA TDB')
 
-    # 2. CARGAR MAESTRO (CON LATITUD Y LONGITUD)
+    # 2. CARGAR MAESTRO
     if file_maestro:
         df_a = read_smart(file_maestro)
         if df_a is not None:
@@ -89,7 +89,6 @@ def load_consolidated_data():
                 if 'latitud' in df_a.columns and 'longitud' in df_a.columns:
                     df_a['latitud'] = pd.to_numeric(df_a['latitud'].astype(str).str.replace(',', '.'), errors='coerce')
                     df_a['longitud'] = pd.to_numeric(df_a['longitud'].astype(str).str.replace(',', '.'), errors='coerce')
-                    # Filtrar coordenadas validas
                     df_a = df_a.dropna(subset=['latitud', 'longitud'])
                     df_a = df_a[(df_a['latitud'] != 0) & (df_a['longitud'] != 0)]
 
@@ -107,7 +106,6 @@ def load_consolidated_data():
     # ENRIQUECIMIENTO
     if df_v is not None and df_a is not None:
         df_v = df_v.rename(columns={'vendedor': 'vendedor_venta'})
-        # Merge ligero para no duplicar filas masivamente, solo columnas clave
         temp_a = df_a[['clienteid', 'vendedor']].drop_duplicates(subset=['clienteid'])
         df_v = pd.merge(df_v, temp_a, on='clienteid', how='left')
         df_v['vendedor'] = df_v['vendedor'].fillna(df_v['vendedor_venta'])
@@ -115,17 +113,10 @@ def load_consolidated_data():
 
     return df_v, df_p, df_a
 
-# --- FUNCIÓN FECHA SEGURA ---
-def get_max_date_safe(df):
-    if df is not None and not df.empty and 'fecha' in df.columns:
-        try: return df['fecha'].dropna().max().strftime('%d-%m-%Y')
-        except: return "Error"
-    return "N/A"
-
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v28.0")
-    st.success("Módulo Geo-Activo")
+    st.title("💎 Master Dashboard v29.0")
+    st.success("Módulo Geo + Tabla Detalle")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
@@ -158,16 +149,16 @@ if df_v is not None:
 
     st.markdown("---")
     
-    # PESTAÑAS (9 EN TOTAL)
-    tabs = st.tabs(["🗺️ Mapa", "🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🗺️ Mapa Ruta", "🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 0. MAPA (RESTAURADO)
+    # 0. MAPA DE RUTA (CON TABLA DE DETALLE)
     with tabs[0]:
         if df_a is not None and 'latitud' in df_a.columns:
             st.header("🗺️ Mapa de Cobertura")
             c_m1, c_m2 = st.columns([1, 3])
+            
             with c_m1:
-                # Filtros Mapa
+                st.subheader("Filtros")
                 vends_map = sorted(df_a['vendedor'].dropna().unique())
                 s_vend = st.multiselect("Vendedor:", vends_map)
                 dias_map = sorted(df_a['dia'].dropna().unique()) if 'dia' in df_a.columns else []
@@ -179,27 +170,51 @@ if df_v is not None:
             
             with c_m2:
                 if not df_map.empty:
-                    # Cruzar con ventas reales para status
+                    # Cruzar con ventas para status
                     clients_buy = set(dff['clienteid'].unique())
                     df_map['Status'] = df_map['clienteid'].apply(lambda x: 'Con Compra' if x in clients_buy else 'Sin Compra')
                     
+                    # 1. EL MAPA
                     fig_map = px.scatter_mapbox(
                         df_map, lat="latitud", lon="longitud", color="Status",
                         color_discrete_map={'Con Compra': '#2ECC71', 'Sin Compra': '#E74C3C'},
-                        hover_name="cliente", hover_data={"vendedor": True}, zoom=12,
-                        title=f"Mapa: {len(df_map)} Clientes"
+                        hover_name="cliente", hover_data={"vendedor": True, "clienteid": True}, zoom=12,
+                        title=f"Mapa: {len(df_map)} Clientes ({len(df_map[df_map['Status']=='Con Compra'])} Efectivos)"
                     )
-                    fig_map.update_layout(mapbox_style="open-street-map", height=600)
+                    fig_map.update_layout(mapbox_style="open-street-map", height=500)
                     st.plotly_chart(fig_map, use_container_width=True)
-                else: st.info("Selecciona filtros para ver el mapa.")
-        else: st.warning("El archivo Maestro no tiene columnas 'Latitud' y 'Longitud'.")
+                    
+                    # 2. LA TABLA DE DETALLE (NUEVO)
+                    st.markdown("---")
+                    st.subheader("📋 Detalle de Clientes en Mapa")
+                    
+                    # Seleccionar columnas relevantes
+                    cols_to_show = ['vendedor', 'clienteid', 'cliente', 'Status']
+                    if 'dia' in df_map.columns: cols_to_show.append('dia')
+                    
+                    # Crear dataframe limpio para la tabla
+                    df_table = df_map[cols_to_show].sort_values(by=['Status', 'cliente'], ascending=[True, True])
+                    
+                    # Colorear la tabla visualmente
+                    def highlight_status(val):
+                        color = '#d4edda' if val == 'Con Compra' else '#f8d7da'
+                        return f'background-color: {color}'
+                    
+                    st.dataframe(
+                        df_table.style.applymap(highlight_status, subset=['Status']),
+                        use_container_width=True
+                    )
+                    
+                else:
+                    st.info("Selecciona filtros para ver el mapa.")
+        else:
+            st.warning("El archivo Maestro no tiene columnas 'Latitud' y 'Longitud'.")
 
-    # 1. PENETRACIÓN (CORREGIDO ERROR LENGTH)
+    # 1. PENETRACIÓN
     with tabs[1]:
         if df_a is not None:
-            st.header("🎯 Penetración de Cartera")
+            st.header("🎯 Penetración")
             v_list = dff['vendedor'].unique()
-            # Asegurar unicidad en maestro para conteo
             df_a_uniq = df_a[['clienteid', 'vendedor']].drop_duplicates()
             df_a_filt = df_a_uniq[df_a_uniq['vendedor'].isin(v_list)]
             
@@ -212,33 +227,31 @@ if df_v is not None:
             
             st.dataframe(pen.sort_values('% Pen', ascending=False).style.format({'% Pen': '{:.1f}%'}), use_container_width=True)
             
-            # Ordenar para gráfico
             pen = pen.sort_values('Asignados', ascending=True)
             fig_p = go.Figure(data=[
                 go.Bar(name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', marker_color='#2ECC71', text=pen['Servidos'], textposition='auto'),
                 go.Bar(name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', marker_color='#E74C3C', text=pen['Gap'], textposition='auto')
             ])
-            fig_p.update_layout(barmode='stack', height=600, title="Cobertura Real vs Potencial")
+            fig_p.update_layout(barmode='stack', height=600, title="Cobertura de Cartera")
             st.plotly_chart(fig_p, use_container_width=True)
-        else: st.warning("Carga Maestro de Clientes.")
+        else: st.warning("Carga Maestro.")
 
     # 2. CAÍDA
     with tabs[2]:
         if df_p is not None:
-            st.header("📉 Análisis de Rechazos")
+            st.header("📉 Rechazos")
             ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
             pre_g = df_p.groupby('id_cruce')['monto_pre'].sum().reset_index()
             m = pd.merge(pre_g, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m['diff'] = m['monto_pre'] - m['monto_real']
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
-            
             c1, c2 = st.columns(2)
-            c1.plotly_chart(px.pie(m, names='st', values='monto_pre', title="Estatus ($)"), use_container_width=True)
+            c1.plotly_chart(px.pie(m, names='st', values='monto_pre', title="Estatus"), use_container_width=True)
             
             m_det = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="$$ Perdidos", text='caida'), use_container_width=True)
+            c2.plotly_chart(px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="$$ Perdidos", color='caida', color_continuous_scale='Reds'), use_container_width=True)
         else: st.warning("Carga Preventas.")
 
     # 3. SIMULADOR
@@ -250,7 +263,7 @@ if df_v is not None:
         dc = c2.slider("Subir Cobertura %", 0, 50, 0)
         d_avg = tot / df_v['fecha'].max().day
         proj = tot + (d_avg * (1+dt/100) * (1+dc/100) * dl)
-        st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
+        st.metric("Proyección", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
 
     # 4. ESTRATEGIA
     with tabs[4]:
@@ -272,6 +285,9 @@ if df_v is not None:
         fig_pay = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
         fig_pay.update_traces(textinfo='percent+label')
         st.plotly_chart(fig_pay, use_container_width=True)
+        if 'Crédito' in pay['tipopago'].values:
+            cred = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
+            st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
 
     # 6. CLIENTES
     with tabs[6]:
@@ -284,14 +300,12 @@ if df_v is not None:
                 cid = cli_map[cl_sel]
                 cd = dff[dff['clienteid'] == cid]
                 ctot = cd['monto_real'].sum()
+                weeks = cd['semana_anio'].nunique()
+                freq = cd['id_transaccion'].nunique() / weeks if weeks>0 else 0
                 c1.metric("Total", f"${ctot:,.0f}")
+                c1.metric("Frecuencia", f"{freq:.1f} /sem")
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
-                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', text='monto_real'), use_container_width=True)
-        
-        w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
-        wl = df_v['fecha'].max() - datetime.timedelta(days=7)
-        churn = list(set(dff[dff['fecha']<=w1]['clienteid']) - set(dff[dff['fecha']>=wl]['clienteid']))
-        st.error(f"⚠️ {len(churn)} Clientes en Riesgo")
+                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos"), use_container_width=True)
 
     # 7. AUDITORIA
     with tabs[7]:
@@ -300,17 +314,23 @@ if df_v is not None:
         j1_o = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
         cat_o = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
         prod_o = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
+        j2_o = sorted(dff['jerarquia2'].dropna().unique()) if 'jerarquia2' in dff.columns else []
+        j3_o = sorted(dff['jerarquia3'].dropna().unique()) if 'jerarquia3' in dff.columns else []
         
         s_j1 = cf1.multiselect("Jerarquía 1", j1_o)
-        s_cat = cf2.multiselect("Categoría", cat_o)
-        s_prod = cf3.multiselect("Producto", prod_o)
+        s_cat = cf1.multiselect("Categoría", cat_o)
+        s_j2 = cf2.multiselect("Jerarquía 2", j2_o)
+        s_prod = cf2.multiselect("Producto", prod_o)
+        s_j3 = cf3.multiselect("Jerarquía 3", j3_o)
         
         df_aud = dff.copy()
         if s_j1: df_aud = df_aud[df_aud['jerarquia1'].isin(s_j1)]
+        if s_j2: df_aud = df_aud[df_aud['jerarquia2'].isin(s_j2)]
+        if s_j3: df_aud = df_aud[df_aud['jerarquia3'].isin(s_j3)]
         if s_cat: df_aud = df_aud[df_aud['categoria'].isin(s_cat)]
         if s_prod: df_aud = df_aud[df_aud['producto'].isin(s_prod)]
         
-        col_hm = 'producto' if s_prod else ('categoria' if s_cat else 'jerarquia1')
+        col_hm = 'producto' if s_prod else ('categoria' if s_cat else ('jerarquia3' if s_j3 else ('jerarquia2' if s_j2 else 'jerarquia1')))
         if col_hm in df_aud.columns:
             piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
             st.plotly_chart(px.imshow(piv, aspect="auto", text_auto='.2s'), use_container_width=True)
