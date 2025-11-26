@@ -7,7 +7,7 @@ import os
 from io import StringIO
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v17.6", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v17.7", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -73,9 +73,19 @@ def load_consolidated_data():
             
     return df_v, df_p
 
+# --- FUNCIÓN PARA OBTENER FECHA MÁXIMA DE FORMA SEGURA ---
+def get_max_date_safe(df):
+    if df is not None and not df.empty and 'fecha' in df.columns and df['fecha'].notna().any():
+        try:
+            return df['fecha'].max().strftime('%d-%m-%Y')
+        except AttributeError:
+            return "Error de Formato"
+    return "No disponible"
+
+
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v17.6")
+    st.title("💎 Master Dashboard v17.7")
     st.info("Datos cargados automáticamente desde GitHub.")
     st.markdown("---")
     st.header("🎯 Metas")
@@ -83,6 +93,10 @@ with st.sidebar:
 
 # Ejecución de carga
 df_v, df_p = load_consolidated_data()
+
+# CÁLCULOS DE FECHA FUERA DEL MAIN IF
+max_v_date = get_max_date_safe(df_v)
+max_p_date = get_max_date_safe(df_p)
 
 if df_v is not None:
     
@@ -98,17 +112,6 @@ if df_v is not None:
 
     # HEADER
     c1, c2 = st.columns([1, 2])
-    
-    # LÓGICA DEFENSIVA PARA MAX DATE
-    max_v_date = "No disponible"
-    if not dff.empty and dff['fecha'].notna().any():
-        max_v_date = dff['fecha'].max().strftime('%d-%m-%Y')
-    
-    max_p_date = "No disponible"
-    if df_p is not None and not df_p.empty and df_p['fecha'].notna().any():
-        max_p_date = df_p['fecha'].max().strftime('%d-%m-%Y')
-
-
     with c1:
         fig_gauge = go.Figure(go.Indicator(
             mode = "gauge+number", value = tot,
@@ -130,13 +133,15 @@ if df_v is not None:
 
     st.markdown("---")
     
-    # --- REPORTE DE SINCRONIZACIÓN (AQUÍ ESTÁ EL REPORTE SOLICITADO) ---
+    # --- REPORTE DE SINCRONIZACIÓN ---
     st.subheader("✅ Estado de Sincronización de Datos")
     
     if max_v_date == max_p_date and max_p_date != "No disponible":
         sync_message = f'<div class="alert-box alert-success">🟢 **Sincronización PERFECTA:** Ambas bases están al día hasta el **{max_v_date}**.</div>'
-    else:
+    elif max_v_date != "No disponible" or max_p_date != "No disponible":
         sync_message = f'<div class="alert-box alert-warning">🟡 **Advertencia:** Venta (Final) al **{max_v_date}** vs. Preventa (Pedido) al **{max_p_date}**.</div>'
+    else:
+        sync_message = '<div class="alert-box alert-danger">🔴 **ERROR CRÍTICO:** No se pudo cargar ninguna fecha válida.</div>'
 
     st.markdown(sync_message, unsafe_allow_html=True)
     st.markdown("---")
@@ -162,6 +167,7 @@ if df_v is not None:
                     total_caida=('caida_val', 'sum')
                 ).reset_index()
                 v_agg['% Caída'] = (v_agg['total_caida'] / v_agg['total_pre']) * 100
+                
                 st.subheader("Top Vendedores con Mayor % de Pedidos Caídos")
                 drop_vend = v_agg.sort_values(by='% Caída', ascending=False).head(10)
                 st.dataframe(drop_vend.style.format({'total_pre': '${:,.0f}', 'total_caida': '${:,.0f}', '% Caída': '{:.1f}%'}), use_container_width=True)
@@ -256,6 +262,7 @@ if df_v is not None:
                         st.write(f"📅 Última: {c_last.strftime('%d-%m-%Y')}")
                         if days > 7: st.error(f"🚨 Inactivo hace {days} días")
                         else: st.success(f"✅ Activo")
+            
             with cc2:
                 if 'cliente' in dff.columns and not dff['cliente'].empty and 'producto' in dff.columns and sel_cl:
                     st.markdown(f"#### 📦 ¿Qué compra {sel_cl}?")
@@ -276,40 +283,35 @@ if df_v is not None:
                 st.dataframe(risk_df.head(10), use_container_width=True)
             else: st.warning("No hay datos para esta vista.")
 
-    # 6. AUDITORÍA
-    with tabs[5]:
-        st.header("🕵️ Mapa de Oportunidades (Gaps)")
-        if not dff.empty:
-            if 'jerarquia1' in dff.columns: col_cat = 'jerarquia1'
-            else: col_cat = 'categoria'
-            pivot = dff.groupby(['vendedor', col_cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_cat, values='monto_real').fillna(0)
-            st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
-        else: st.warning("No hay datos para esta vista.")
+        # 6. AUDITORÍA
+        with tabs[5]:
+            st.header("🕵️ Mapa de Oportunidades (Gaps)")
+            if not dff.empty:
+                if 'jerarquia1' in dff.columns: col_cat = 'jerarquia1'
+                else: col_cat = 'categoria'
+                pivot = dff.groupby(['vendedor', col_cat])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_cat, values='monto_real').fillna(0)
+                st.plotly_chart(px.imshow(pivot, text_auto='.2s', aspect="auto", color_continuous_scale='Blues'), use_container_width=True)
+            else: st.warning("No hay datos para esta vista.")
 
-    # 7. INTELIGENCIA
-    with tabs[6]:
-        st.header("🧠 Recomendador")
-        if not dff.empty and 'producto' in dff.columns and 'id_transaccion' in dff.columns:
-            st.subheader("Cross-Selling (Productos relacionados)")
-            prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
-            sel_p = st.selectbox("Si el cliente lleva...", prods)
-            if sel_p:
-                txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
-                sub = dff[dff['id_transaccion'].isin(txs)]
-                sub = sub[sub['producto'] != sel_p]
-                if not sub.empty:
-                    rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
-                    st.success("👉 Ofrécele también:")
-                    st.table(rel.set_index('producto'))
-                else: st.info("No se encontraron productos relacionados en las transacciones.")
-        else: st.warning("No hay datos suficientes para esta vista.")
+        # 7. INTELIGENCIA
+        with tabs[6]:
+            st.header("🧠 Recomendador")
+            if not dff.empty and 'producto' in dff.columns and 'id_transaccion' in dff.columns:
+                st.subheader("Cross-Selling (Productos relacionados)")
+                prods = dff.groupby('producto')['monto_real'].sum().sort_values(ascending=False).head(50).index
+                sel_p = st.selectbox("Si el cliente lleva...", prods)
+                if sel_p:
+                    txs = dff[dff['producto'] == sel_p]['id_transaccion'].unique()
+                    sub = dff[dff['id_transaccion'].isin(txs)]
+                    sub = sub[sub['producto'] != sel_p]
+                    if not sub.empty:
+                        rel = sub.groupby('producto')['id_transaccion'].nunique().reset_index().sort_values('id_transaccion', ascending=False).head(5)
+                        st.success("👉 Ofrécele también:")
+                        st.table(rel.set_index('producto'))
+                    else: st.info("No se encontraron productos relacionados en las transacciones.")
+            else: st.warning("No hay datos suficientes para esta vista.")
 
 
 else:
     # 🚨 ERROR SI NO ENCUENTRA EL ARCHIVO PRINCIPAL
     st.error("🚨 ERROR CRÍTICO: No se pudo cargar el archivo de ventas principal ('venta_completa.csv').")
-    st.markdown("""
-        **Verifica en tu repositorio de GitHub:**
-        1.  El archivo **`venta_completa.csv`** existe.
-        2.  Debe estar en formato CSV.
-    """)
