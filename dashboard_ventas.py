@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v23.1", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v24.0", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -33,7 +33,6 @@ def load_consolidated_data():
     df_v, df_p, df_a = None, None, None
     
     def read_smart(file_path):
-        # Búsqueda insensible a mayúsculas
         if not os.path.exists(file_path):
             if os.path.exists(file_path.lower()): file_path = file_path.lower()
             elif os.path.exists(file_path.capitalize()): file_path = file_path.capitalize()
@@ -77,7 +76,6 @@ def load_consolidated_data():
     if df_a is not None:
         col_id = next((c for c in df_a.columns if 'cliente' in c and 'id' in c), None)
         col_vend = next((c for c in df_a.columns if 'vendedor' in c), None)
-        
         if col_id and col_vend:
             df_a = df_a.rename(columns={col_id: 'clienteid', col_vend: 'vendedor'})
             df_a['clienteid'] = df_a['clienteid'].astype(str)
@@ -91,7 +89,8 @@ def load_consolidated_data():
         if 'monto_final' in df_p.columns: df_p['monto_pre'] = df_p['monto_final']
         elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
         else: df_p['monto_pre'] = 0
-        df_p['id_cruce'] = df_p.get('nro_preventa', df_p.get('nropreventa', 0))
+        col_pre = next((c for c in df_p.columns if 'nro' in c and 'preventa' in c), None)
+        if col_pre: df_p['id_cruce'] = df_p[col_pre]
 
     # --- ENRIQUECIMIENTO ---
     if df_v is not None and df_a is not None:
@@ -104,8 +103,8 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v23.1")
-    st.success("Etiquetas de Datos Activadas")
+    st.title("💎 Master Dashboard v24.0")
+    st.success("Auditoría Multinivel Restaurada")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
@@ -143,38 +142,27 @@ if df_v is not None:
     # PESTAÑAS
     tabs = st.tabs(["🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes 360", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 1. PENETRACIÓN (Con Etiquetas)
+    # 1. PENETRACIÓN
     with tabs[0]:
         if df_a is not None:
             st.header("🎯 Penetración de Cartera")
             v_list = dff['vendedor'].unique()
             df_a_filt = df_a[df_a['vendedor'].isin(v_list)]
-            
             asig = df_a_filt.groupby('vendedor')['clienteid'].nunique().reset_index(name='Asignados')
             serv = dff.groupby('vendedor')['clienteid'].nunique().reset_index(name='Servidos')
-            
             pen = pd.merge(asig, serv, on='vendedor', how='left').fillna(0)
             pen['% Pen'] = (pen['Servidos']/pen['Asignados'].replace(0,1))*100
             pen['Gap'] = pen['Asignados'] - pen['Servidos']
-            
-            # Gráfico con TEXTO AUTOMÁTICO
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', 
-                marker_color='#2ECC71', text=pen['Servidos'], textposition='auto'
-            ))
-            fig.add_trace(go.Bar(
-                name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', 
-                marker_color='#E74C3C', text=pen['Gap'], textposition='auto'
-            ))
-            
-            fig.update_layout(barmode='stack', height=600, title="Cobertura de Cartera (Etiquetas Visibles)")
-            st.plotly_chart(fig, use_container_width=True)
-            
             st.dataframe(pen.sort_values('% Pen', ascending=False).style.format({'% Pen': '{:.1f}%'}), use_container_width=True)
+            fig = go.Figure(data=[
+                go.Bar(name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', marker_color='#2ECC71', text=pen['Servidos'], textposition='auto'),
+                go.Bar(name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', marker_color='#E74C3C', text=pen['Gap'], textposition='auto')
+            ])
+            fig.update_layout(barmode='stack', height=500, title="Cobertura (Etiquetas Visibles)")
+            st.plotly_chart(fig, use_container_width=True)
         else: st.warning("Carga 'Maestro_de_clientes.csv'.")
 
-    # 2. CAÍDA (Con Etiquetas)
+    # 2. CAÍDA
     with tabs[1]:
         if df_p is not None:
             st.header("📉 Análisis de Rechazos")
@@ -183,9 +171,7 @@ if df_v is not None:
             m = pd.merge(pre_g, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m['diff'] = m['monto_pre'] - m['monto_real']
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
-            
             c1, c2 = st.columns(2)
-            # Torta con etiquetas
             fig_pie = px.pie(m, names='st', values='monto_pre', title="Estatus ($)")
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             c1.plotly_chart(fig_pie, use_container_width=True)
@@ -193,11 +179,9 @@ if df_v is not None:
             m_det = pd.merge(df_p, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-            
-            # Barra con etiquetas
-            fig_bar_drop = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", color='caida', text='caida', color_continuous_scale='Reds')
-            fig_bar_drop.update_traces(texttemplate='$%{text:,.0f}', textposition='outside')
-            c2.plotly_chart(fig_bar_drop, use_container_width=True)
+            fig_bar = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", text='caida', color='caida', color_continuous_scale='Reds')
+            fig_bar.update_traces(texttemplate='$%{text:,.0f}', textposition='outside')
+            c2.plotly_chart(fig_bar, use_container_width=True)
         else: st.warning("Carga 'preventa_completa.csv'.")
 
     # 3. SIMULADOR
@@ -207,104 +191,97 @@ if df_v is not None:
         c1, c2 = st.columns(2)
         dt = c1.slider("Subir Ticket %", 0, 50, 0)
         dc = c2.slider("Subir Cobertura %", 0, 50, 0)
-        
         d_avg = tot / df_v['fecha'].max().day
         proj = tot + (d_avg * (1+dt/100) * (1+dc/100) * dl)
         st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
 
-    # 4. ESTRATEGIA (Con Etiquetas)
+    # 4. ESTRATEGIA
     with tabs[3]:
         st.header("📈 Estrategia")
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
-        
         fig = go.Figure()
-        # Barra con etiquetas de Venta
-        fig.add_trace(go.Bar(
-            x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6',
-            text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'
-        ))
-        # Línea
-        fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3)))
-        
+        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'))
+        fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3), mode='lines+markers+text', text=day['clienteid'], textposition='top center'))
         fig.update_layout(yaxis2=dict(overlaying='y', side='right'), title="Venta vs Clientes", height=600)
         st.plotly_chart(fig, use_container_width=True)
         
         sun = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
         st.plotly_chart(px.sunburst(sun, path=['canal', 'vendedor'], values='monto_real'), use_container_width=True)
 
-    # 5. FINANZAS (Con Etiquetas)
+    # 5. FINANZAS
     with tabs[4]:
         st.header("💳 Finanzas")
         pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
-        fig_pay = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
-        fig_pay.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pay, use_container_width=True)
-        
+        fig_p = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
+        fig_p.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_p, use_container_width=True)
         if 'Crédito' in pay['tipopago'].values:
             cred = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
-            st.write("Top Crédito")
             st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
 
-    # 6. CLIENTES (Con Etiquetas)
+    # 6. CLIENTES
     with tabs[5]:
         st.header("👥 Clientes 360°")
         c1, c2 = st.columns([1, 2])
-        
         if 'cliente' in dff.columns:
             cli_map = dff[['cliente', 'clienteid']].drop_duplicates().set_index('cliente')['clienteid'].to_dict()
             cl_sel = c1.selectbox("Buscar Cliente:", sorted(cli_map.keys()))
-            
             if cl_sel:
                 cid = cli_map[cl_sel]
                 cd = dff[dff['clienteid'] == cid]
-                
                 ctot = cd['monto_real'].sum()
                 weeks = cd['semana_anio'].nunique()
                 freq = cd['id_transaccion'].nunique() / weeks if weeks>0 else 0
-                
                 c1.info(f"{cl_sel}")
                 c1.metric("Total", f"${ctot:,.0f}")
                 c1.metric("Frecuencia", f"{freq:.1f} /sem")
-                
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
                 fig_cp = px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos", text='monto_real')
                 fig_cp.update_traces(texttemplate='$%{text:,.0f}', textposition='inside')
                 c2.plotly_chart(fig_cp, use_container_width=True)
         
-        # Fuga
         w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
         wl = df_v['fecha'].max() - datetime.timedelta(days=7)
-        s_cl = set(dff[dff['fecha']<=w1]['clienteid'])
-        e_cl = set(dff[dff['fecha']>=wl]['clienteid'])
-        churn = list(s_cl - e_cl)
-        
+        churn = list(set(dff[dff['fecha']<=w1]['clienteid']) - set(dff[dff['fecha']>=wl]['clienteid']))
         st.error(f"⚠️ {len(churn)} Clientes en Riesgo (Fuga)")
         if churn:
             churn_df = dff[dff['clienteid'].isin(churn)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False)
             st.dataframe(churn_df.head(10), use_container_width=True)
 
-    # 7. AUDITORIA (Filtros Restaurados)
+    # 7. AUDITORIA (RESTAURADA)
     with tabs[6]:
         st.header("🔍 Auditoría")
-        
         cf1, cf2, cf3 = st.columns(3)
-        j1_opt = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
-        cat_opt = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
-        prod_opt = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
         
-        s_j1 = cf1.multiselect("Jerarquía 1", j1_opt)
-        s_cat = cf2.multiselect("Categoría", cat_opt)
-        s_prod = cf3.multiselect("Producto", prod_opt)
+        # Opciones seguras para filtros
+        j1_o = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
+        j2_o = sorted(dff['jerarquia2'].dropna().unique()) if 'jerarquia2' in dff.columns else []
+        j3_o = sorted(dff['jerarquia3'].dropna().unique()) if 'jerarquia3' in dff.columns else []
+        cat_o = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
+        prod_o = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
         
+        with cf1:
+            s_j1 = st.multiselect("Jerarquía 1", j1_o)
+            s_cat = st.multiselect("Categoría", cat_o)
+        with cf2:
+            s_j2 = st.multiselect("Jerarquía 2", j2_o)
+            s_prod = st.multiselect("Producto", prod_o)
+        with cf3:
+            s_j3 = st.multiselect("Jerarquía 3", j3_o)
+            
         df_aud = dff.copy()
         if s_j1: df_aud = df_aud[df_aud['jerarquia1'].isin(s_j1)]
+        if s_j2: df_aud = df_aud[df_aud['jerarquia2'].isin(s_j2)]
+        if s_j3: df_aud = df_aud[df_aud['jerarquia3'].isin(s_j3)]
         if s_cat: df_aud = df_aud[df_aud['categoria'].isin(s_cat)]
         if s_prod: df_aud = df_aud[df_aud['producto'].isin(s_prod)]
         
-        col_hm = 'producto' if s_prod else ('categoria' if s_cat else 'jerarquia1')
+        # Nivel de detalle dinámico
+        col_hm = 'producto' if s_prod else ('categoria' if s_cat else ('jerarquia3' if s_j3 else ('jerarquia2' if s_j2 else 'jerarquia1')))
+        
         if col_hm in df_aud.columns:
             piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
-            st.plotly_chart(px.imshow(piv, aspect="auto", title=f"Mapa de Calor: Vendedor vs {col_hm}", text_auto='.2s'), use_container_width=True)
+            st.plotly_chart(px.imshow(piv, aspect="auto", title=f"Heatmap: {col_hm}", text_auto='.2s'), use_container_width=True)
 
     # 8. INTELIGENCIA
     with tabs[7]:
