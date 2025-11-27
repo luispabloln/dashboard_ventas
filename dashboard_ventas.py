@@ -230,13 +230,13 @@ if df_v is not None:
             def clasificar(f):
                 if f == 0: return 'Sin Compra (0)'
                 elif f < 3: return 'Baja (<3)'
-                elif f <= 5: return 'Ideal (3-5)'
+                elif f <= 5: return 'En Modelo (3-5)'
                 else: return 'Alta (>5)'
             
             df_freq['Estado'] = df_freq['frecuencia_real'].apply(clasificar)
             
             total_cartera = len(df_freq)
-            en_modelo = len(df_freq[df_freq['Estado'] == 'En Modelo (3-5)'])
+            en_modelo = len(df_freq[df_freq['Estado'].str.contains('En Modelo')])
             fuera_modelo = total_cartera - en_modelo
             
             k1, k2, k3 = st.columns(3)
@@ -249,8 +249,8 @@ if df_v is not None:
                 resumen = df_freq['Estado'].value_counts().reset_index()
                 resumen.columns = ['Estado', 'Count']
                 fig_pie_freq = px.pie(resumen, values='Count', names='Estado', title="Distribución",
-                                      color='Estado', 
-                                      color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
+                                   color='Estado', 
+                                   color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
                 fig_pie_freq.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_pie_freq, use_container_width=True)
             with c_f2:
@@ -258,9 +258,9 @@ if df_v is not None:
                 total_vend = freq_vend.groupby('vendedor')['Count'].transform('sum')
                 freq_vend['Pct'] = (freq_vend['Count'] / total_vend) * 100
                 fig_bar_freq = px.bar(freq_vend, x='Pct', y='vendedor', color='Estado', orientation='h', 
-                                      title="Cumplimiento por Vendedor (%)",
-                                      text='Pct',
-                                      color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
+                                   title="Cumplimiento por Vendedor (%)",
+                                   text='Pct',
+                                   color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
                 fig_bar_freq.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
                 st.plotly_chart(fig_bar_freq, use_container_width=True)
             
