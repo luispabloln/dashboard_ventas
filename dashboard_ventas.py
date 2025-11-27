@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v36.2", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v37.1", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -36,8 +36,9 @@ def load_consolidated_data():
     file_venta = find_file_fuzzy(['venta', 'completa'])
     file_preventa = find_file_fuzzy(['preventa'])
     file_maestro = find_file_fuzzy(['maestro', 'cliente'])
+    file_rebotes = find_file_fuzzy(['rebotes'])
     
-    df_v, df_p, df_a = None, None, None
+    df_v, df_p, df_a, df_r = None, None, None, None
     
     def read_smart(file_path):
         if not file_path: return None
@@ -108,6 +109,22 @@ def load_consolidated_data():
             else: df_p['monto_pre'] = 0
             col_pre = next((c for c in df_p.columns if 'nro' in c and 'preventa' in c), None)
             if col_pre: df_p['id_cruce'] = df_p[col_pre]
+    
+    # 4. CARGAR REBOTES
+    if file_rebotes:
+        df_r = read_smart(file_rebotes)
+        if df_r is not None:
+            # Normalizar fecha
+            col_fecha = next((c for c in df_r.columns if 'fecha' in c), None)
+            if col_fecha:
+                df_r[col_fecha] = pd.to_datetime(df_r[col_fecha], format='%d/%m/%Y', dayfirst=True, errors='coerce')
+            # Normalizar vendedor para filtros
+            if 'vendedor' in df_r.columns:
+                df_r['vendedor'] = df_r['vendedor'].astype(str).str.strip().str.upper()
+            # Normalizar monto rechazo
+            col_monto_r = next((c for c in df_r.columns if 'monto' in c and 'rechazo' in c), None)
+            if col_monto_r:
+                df_r['monto_rechazo'] = pd.to_numeric(df_r[col_monto_r], errors='coerce').fillna(0)
 
     # ENRIQUECIMIENTO
     if df_v is not None and df_a is not None:
@@ -117,42 +134,31 @@ def load_consolidated_data():
         df_v['vendedor'] = df_v['vendedor'].fillna(df_v['vendedor_venta'])
         df_v['canal'] = df_v['vendedor'].map(cat_map).fillna('6. RUTA TDB')
 
-    return df_v, df_p, df_a
+    return df_v, df_p, df_a, df_r
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v36.2")
-    st.success("Etiquetas de Datos Activadas")
+    st.title("💎 Master Dashboard v37.1")
+    st.success("Módulo Rebotes Agregado")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
-df_v, df_p, df_a = load_consolidated_data()
+df_v, df_p, df_a, df_r = load_consolidated_data()
 
 if df_v is not None:
     
-    # --- FILTROS ---
-    col_filt1, col_filt2 = st.sidebar.columns(2) # O st.sidebar directamente
+    sel_vendedor = st.sidebar.selectbox("Filtrar por Vendedor:", ["Todos"] + sorted(df_v['vendedor'].dropna().unique().tolist()))
     
-    # 1. Filtro Canal
-    canales_list = sorted(df_v['canal'].dropna().unique().tolist())
-    sel_canal = st.sidebar.multiselect("Filtrar por Canal:", canales_list, default=canales_list)
-    
-    # Filtrar primero por canal
-    dff_canal = df_v[df_v['canal'].isin(sel_canal)].copy()
-    
-    # 2. Filtro Vendedor (Dependiente del Canal)
-    vendedores_list = sorted(dff_canal['vendedor'].dropna().unique().tolist())
-    sel_vendedor = st.sidebar.selectbox("Filtrar por Vendedor:", ["Todos"] + vendedores_list)
-    
-    # Aplicar filtro final
     if sel_vendedor != "Todos":
-        dff = dff_canal[dff_canal['vendedor'] == sel_vendedor].copy()
+        dff = df_v[df_v['vendedor'] == sel_vendedor].copy()
         if df_a is not None: df_a_filt = df_a[df_a['vendedor'] == sel_vendedor]
         if df_p is not None: df_p_filt = df_p[df_p['vendedor'] == sel_vendedor]
+        if df_r is not None: df_r_filt = df_r[df_r['vendedor'] == sel_vendedor]
     else:
-        dff = dff_canal.copy()
-        if df_a is not None: df_a_filt = df_a[df_a['vendedor'].isin(vendedores_list)] # Filtrar asignaciones por vendedores visibles
-        if df_p is not None: df_p_filt = df_p[df_p['vendedor'].isin(vendedores_list)] # Filtrar preventas por vendedores visibles
+        dff = df_v.copy()
+        if df_a is not None: df_a_filt = df_a.copy()
+        if df_p is not None: df_p_filt = df_p.copy()
+        if df_r is not None: df_r_filt = df_r.copy()
     
     tot = dff['monto_real'].sum()
     cob = dff['clienteid'].nunique()
@@ -176,10 +182,58 @@ if df_v is not None:
 
     st.markdown("---")
     
-    tabs = st.tabs(["🎯 Cobertura", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🚫 Rebotes (NUEVO)", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 1. PENETRACIÓN
+    # 0. REBOTES (NUEVO MODULO)
     with tabs[0]:
+        st.header("🚫 Análisis de Rebotes (Devoluciones)")
+        
+        if df_r is not None:
+            # KPIs Rebotes
+            total_rechazo = df_r_filt['monto_rechazo'].sum()
+            cant_rebotes = len(df_r_filt)
+            
+            kr1, kr2 = st.columns(2)
+            kr1.metric("💰 Monto Total Rechazado", f"${total_rechazo:,.0f}")
+            kr2.metric("📦 Cantidad de Rebotes", f"{cant_rebotes}")
+            
+            st.markdown("---")
+            
+            col_reb1, col_reb2 = st.columns([1, 2])
+            
+            with col_reb1:
+                # Motivo de Rechazo
+                col_motivo = next((c for c in df_r_filt.columns if 'motivo' in c), None)
+                if col_motivo:
+                    rechazo_motivo = df_r_filt[col_motivo].value_counts().reset_index()
+                    rechazo_motivo.columns = ['Motivo', 'Cantidad']
+                    fig_pie_r = px.pie(rechazo_motivo, values='Cantidad', names='Motivo', title="Motivos de Rechazo")
+                    st.plotly_chart(fig_pie_r, use_container_width=True)
+                else:
+                    st.info("No se encontró columna de 'Motivo' en el archivo.")
+
+            with col_reb2:
+                # Ranking Rebotes por Vendedor (si es Todos) o Detalle
+                if sel_vendedor == "Todos":
+                    rebotes_vend = df_r_filt.groupby('vendedor')['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
+                    fig_bar_r = px.bar(rebotes_vend, x='monto_rechazo', y='vendedor', orientation='h', 
+                                       title="Monto Rechazado por Vendedor", text_auto='.2s', color='monto_rechazo', color_continuous_scale='Reds')
+                    st.plotly_chart(fig_bar_r, use_container_width=True)
+                else:
+                    st.subheader("Detalle de Rechazos")
+                    # Mostrar columnas relevantes
+                    cols_view = [c for c in ['fecha_preventa', 'cliente', 'zona', 'monto_rechazo', 'motivo_rechazo'] if c in df_r_filt.columns]
+                    st.dataframe(df_r_filt[cols_view].sort_values('monto_rechazo', ascending=False), use_container_width=True)
+            
+            # Tabla General
+            st.subheader("📋 Listado Completo de Rebotes")
+            st.dataframe(df_r_filt, use_container_width=True)
+            
+        else:
+            st.warning("⚠️ Carga el archivo 'rebotes.csv' en tu repositorio para ver este análisis.")
+
+    # 1. PENETRACIÓN
+    with tabs[1]:
         if df_a is not None:
             st.header("🎯 Penetración de Cartera")
             
@@ -220,7 +274,7 @@ if df_v is not None:
         else: st.warning("Carga 'Maestro_de_clientes.csv'.")
 
     # 2. FRECUENCIA
-    with tabs[1]:
+    with tabs[2]:
         st.header("📅 Frecuencia")
         if df_a is not None:
             cartera_total = df_a_filt[['clienteid', 'cliente', 'vendedor']].drop_duplicates(subset=['clienteid'])
@@ -236,7 +290,7 @@ if df_v is not None:
             df_freq['Estado'] = df_freq['frecuencia_real'].apply(clasificar)
             
             total_cartera = len(df_freq)
-            en_modelo = len(df_freq[df_freq['Estado'].str.contains('En Modelo')])
+            en_modelo = len(df_freq[df_freq['Estado'] == 'En Modelo (3-5)'])
             fuera_modelo = total_cartera - en_modelo
             
             k1, k2, k3 = st.columns(3)
@@ -270,7 +324,7 @@ if df_v is not None:
         else: st.warning("Carga Maestro.")
 
     # 3. MAPA
-    with tabs[2]:
+    with tabs[3]:
         if df_a is not None and 'latitud' in df_a.columns:
             st.header("🗺️ Mapa de Ruta")
             c_map1, c_map2 = st.columns([1, 2])
@@ -303,7 +357,7 @@ if df_v is not None:
         else: st.warning("Falta Maestro con Coordenadas.")
 
     # 4. CAÍDA
-    with tabs[3]:
+    with tabs[4]:
         if df_p is not None:
             st.header("📉 Rechazos")
             ven_g = dff.groupby('preventaid')['monto_real'].sum().reset_index()
@@ -329,7 +383,7 @@ if df_v is not None:
         else: st.warning("Carga Preventas.")
 
     # 5. SIMULADOR
-    with tabs[4]:
+    with tabs[5]:
         st.header("🎮 Simulador")
         dl = max(0, 30 - df_v['fecha'].max().day)
         c1, c2 = st.columns(2)
@@ -340,7 +394,7 @@ if df_v is not None:
         st.metric("Cierre Proyectado", f"${proj:,.0f}", f"{proj-meta:,.0f} vs Meta")
 
     # 6. ESTRATEGIA
-    with tabs[5]:
+    with tabs[6]:
         st.header("📈 Estrategia")
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
         fig = go.Figure()
@@ -354,7 +408,7 @@ if df_v is not None:
             st.plotly_chart(px.sunburst(sun, path=['canal', 'vendedor'], values='monto_real'), use_container_width=True)
 
     # 7. FINANZAS
-    with tabs[6]:
+    with tabs[7]:
         st.header("💳 Finanzas")
         pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
         fig_pay = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
@@ -365,7 +419,7 @@ if df_v is not None:
             st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
 
     # 8. CLIENTES
-    with tabs[7]:
+    with tabs[8]:
         st.header("👥 Clientes")
         c1, c2 = st.columns([1, 2])
         if 'cliente' in dff.columns:
@@ -390,7 +444,7 @@ if df_v is not None:
             st.dataframe(churn_df.head(10), use_container_width=True)
 
     # 9. AUDITORIA
-    with tabs[8]:
+    with tabs[9]:
         st.header("🔍 Auditoría")
         cf1, cf2, cf3 = st.columns(3)
         j1_o = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
@@ -412,7 +466,7 @@ if df_v is not None:
             st.plotly_chart(px.imshow(piv, aspect="auto", text_auto='.2s'), use_container_width=True)
 
     # 10. INTELIGENCIA
-    with tabs[9]:
+    with tabs[10]:
         st.header("🧠 Inteligencia")
         if 'producto' in dff.columns:
             tops = dff.groupby('producto')['monto_real'].sum().nlargest(50).index
