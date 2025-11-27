@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v36.1", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v36.2", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -121,7 +121,7 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v36.1")
+    st.title("💎 Master Dashboard v36.2")
     st.success("Etiquetas de Datos Activadas")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
@@ -130,16 +130,29 @@ df_v, df_p, df_a = load_consolidated_data()
 
 if df_v is not None:
     
-    sel_vendedor = st.sidebar.selectbox("Filtrar por Vendedor:", ["Todos"] + sorted(df_v['vendedor'].dropna().unique().tolist()))
+    # --- FILTROS ---
+    col_filt1, col_filt2 = st.sidebar.columns(2) # O st.sidebar directamente
     
+    # 1. Filtro Canal
+    canales_list = sorted(df_v['canal'].dropna().unique().tolist())
+    sel_canal = st.sidebar.multiselect("Filtrar por Canal:", canales_list, default=canales_list)
+    
+    # Filtrar primero por canal
+    dff_canal = df_v[df_v['canal'].isin(sel_canal)].copy()
+    
+    # 2. Filtro Vendedor (Dependiente del Canal)
+    vendedores_list = sorted(dff_canal['vendedor'].dropna().unique().tolist())
+    sel_vendedor = st.sidebar.selectbox("Filtrar por Vendedor:", ["Todos"] + vendedores_list)
+    
+    # Aplicar filtro final
     if sel_vendedor != "Todos":
-        dff = df_v[df_v['vendedor'] == sel_vendedor].copy()
+        dff = dff_canal[dff_canal['vendedor'] == sel_vendedor].copy()
         if df_a is not None: df_a_filt = df_a[df_a['vendedor'] == sel_vendedor]
         if df_p is not None: df_p_filt = df_p[df_p['vendedor'] == sel_vendedor]
     else:
-        dff = df_v.copy()
-        if df_a is not None: df_a_filt = df_a.copy()
-        if df_p is not None: df_p_filt = df_p.copy()
+        dff = dff_canal.copy()
+        if df_a is not None: df_a_filt = df_a[df_a['vendedor'].isin(vendedores_list)] # Filtrar asignaciones por vendedores visibles
+        if df_p is not None: df_p_filt = df_p[df_p['vendedor'].isin(vendedores_list)] # Filtrar preventas por vendedores visibles
     
     tot = dff['monto_real'].sum()
     cob = dff['clienteid'].nunique()
@@ -184,7 +197,7 @@ if df_v is not None:
             st.markdown("---")
             
             if sel_vendedor == "Todos":
-                asig = df_a.groupby('vendedor')['clienteid'].nunique().reset_index(name='Asignados')
+                asig = df_a_filt.groupby('vendedor')['clienteid'].nunique().reset_index(name='Asignados') # Usar df_a_filt
                 serv = dff.groupby('vendedor')['clienteid'].nunique().reset_index(name='Servidos')
                 pen = pd.merge(asig, serv, on='vendedor', how='left').fillna(0)
                 pen['% Pen'] = (pen['Servidos'] / pen['Asignados'].replace(0, 1)) * 100
@@ -235,14 +248,12 @@ if df_v is not None:
             with c_f1:
                 resumen = df_freq['Estado'].value_counts().reset_index()
                 resumen.columns = ['Estado', 'Count']
-                # Pie chart con etiquetas
                 fig_pie_freq = px.pie(resumen, values='Count', names='Estado', title="Distribución",
                                       color='Estado', 
                                       color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
                 fig_pie_freq.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_pie_freq, use_container_width=True)
             with c_f2:
-                # Barra con etiquetas
                 freq_vend = df_freq.groupby(['vendedor', 'Estado']).size().reset_index(name='Count')
                 total_vend = freq_vend.groupby('vendedor')['Count'].transform('sum')
                 freq_vend['Pct'] = (freq_vend['Count'] / total_vend) * 100
@@ -266,6 +277,7 @@ if df_v is not None:
             with c_map1:
                 dias_map = sorted(df_a['dia'].dropna().unique()) if 'dia' in df_a.columns else []
                 s_dia = st.multiselect("Día Visita:", dias_map)
+                
                 df_map = df_a_filt.copy()
                 if s_dia and 'dia' in df_map.columns: df_map = df_map[df_map['dia'].isin(s_dia)]
                 
@@ -279,11 +291,13 @@ if df_v is not None:
                         msg += f"❌ *{row['cliente']}*\n📍 https://www.google.com/maps/search/?api=1&query={row['latitud']},{row['longitud']}\n\n"
                     st.text_area("WhatsApp:", value=msg, height=300)
                 else: st.success("¡Ruta Completa!")
+            
             with c_map2:
                 if not df_map.empty:
                     fig_map = px.scatter_mapbox(df_map, lat="latitud", lon="longitud", color="Status", color_discrete_map={'Con Compra': '#2ECC71', 'Sin Compra': '#E74C3C'}, zoom=12)
                     fig_map.update_layout(mapbox_style="open-street-map", height=600)
                     st.plotly_chart(fig_map, use_container_width=True)
+                    
                     df_map['Link'] = df_map.apply(lambda row: f"https://www.google.com/maps/dir/?api=1&destination={row['latitud']},{row['longitud']}", axis=1)
                     st.dataframe(df_map[['cliente', 'Status', 'Link']].sort_values('Status'), column_config={"Link": st.column_config.LinkColumn("Ir", display_text="📍")}, use_container_width=True)
         else: st.warning("Falta Maestro con Coordenadas.")
@@ -299,7 +313,6 @@ if df_v is not None:
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
             c1, c2 = st.columns(2)
             
-            # Pie con etiquetas
             fig_pie = px.pie(m, names='st', values='monto_pre', title="Estatus ($)")
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             c1.plotly_chart(fig_pie, use_container_width=True)
@@ -308,8 +321,7 @@ if df_v is not None:
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             if sel_vendedor == "Todos":
                 top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-                # Barra con etiquetas
-                fig_bar = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="$$ Perdidos", text='caida', color='caida', color_continuous_scale='Reds')
+                fig_bar = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", text='caida', color='caida', color_continuous_scale='Reds')
                 fig_bar.update_traces(texttemplate='$%{text:,.0f}', textposition='outside')
                 c2.plotly_chart(fig_bar, use_container_width=True)
             else:
@@ -331,13 +343,9 @@ if df_v is not None:
     with tabs[5]:
         st.header("📈 Estrategia")
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
-        
         fig = go.Figure()
-        # Barra con etiquetas
         fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'))
-        # Línea con etiquetas
         fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3), mode='lines+markers+text', text=day['clienteid'], textposition='top center'))
-        
         fig.update_layout(yaxis2=dict(overlaying='y', side='right'), title="Venta vs Clientes", height=600)
         st.plotly_chart(fig, use_container_width=True)
         
@@ -349,7 +357,6 @@ if df_v is not None:
     with tabs[6]:
         st.header("💳 Finanzas")
         pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
-        # Pie con etiquetas
         fig_pay = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
         fig_pay.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_pay, use_container_width=True)
@@ -370,7 +377,6 @@ if df_v is not None:
                 ctot = cd['monto_real'].sum()
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
                 c1.metric("Total", f"${ctot:,.0f}")
-                # Barra con etiquetas
                 fig_cp = px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos", text='monto_real')
                 fig_cp.update_traces(texttemplate='$%{text:,.0f}', textposition='inside')
                 c2.plotly_chart(fig_cp, use_container_width=True)
@@ -403,7 +409,6 @@ if df_v is not None:
         col_hm = 'producto' if s_prod else ('categoria' if s_cat else 'jerarquia1')
         if col_hm in df_aud.columns:
             piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
-            # Heatmap con etiquetas
             st.plotly_chart(px.imshow(piv, aspect="auto", text_auto='.2s'), use_container_width=True)
 
     # 10. INTELIGENCIA
