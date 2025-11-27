@@ -1,21 +1,3 @@
-¡Entendido! Tienes toda la razón. Para gestionar realmente el "Modelo de Atención", no basta con ver porcentajes; necesitas saber cuántos clientes exactos cumplen y cuántos faltan, sobre el total de la cartera asignada (no solo los que compraron).
-
-He actualizado el Módulo de "📅 Frecuencia" para que cruce la información con el Maestro de Clientes.
-
-🚀 Nueva Funcionalidad: "Semáforo del Modelo de Atención"
-Ahora, al entrar a la pestaña de Frecuencia, verás 3 tarjetas grandes arriba:
-
-👥 Cartera Total: Cuántos clientes tiene asignados el vendedor (incluso los que no compraron).
-
-✅ En Modelo (3-5): Cuántos compraron entre 3 y 5 veces (El objetivo).
-
-❌ Fuera de Modelo: Cuántos tienen frecuencia baja (<3), nula (0) o excesiva (>5).
-
-💻 Código V33.0 (Frecuencia con Auditoría de Modelo)
-Instrucciones: Reemplaza todo el código en dashboard_ventas.py.
-
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
