@@ -1,21 +1,3 @@
-¡Entendido! Quieres combinar la robustez de la V34 (que funcionaba perfecto en todos los módulos) con las nuevas funciones de la V35 (el resumen de Penetración y el generador de WhatsApp), pero sin romper nada.
-
-He creado la Versión 36.1 (Fusión Definitiva).
-
-🚀 ¿Qué tiene esta versión final?
-Base Sólida (v34): Mantiene todas las pestañas funcionando (Auditoría, Clientes, Estrategia) tal como te gustaban.
-
-Resumen de Penetración (v35): Agrega los 4 cuadros de KPI (Total, Visitados, No Visitados, Efectividad) en la pestaña Penetración.
-
-Generador WhatsApp (v31): Agrega el botón y texto en la pestaña Mapa.
-
-Esta es la versión más completa y segura.
-
-💻 Código V36.1 (Fusión Final)
-Instrucciones: Reemplaza todo el código en dashboard_ventas.py y haz el commit.
-
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
