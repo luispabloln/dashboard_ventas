@@ -158,7 +158,7 @@ if df_v is not None:
 
     st.markdown("---")
     
-    tabs = st.tabs(["📅 Frecuencia", "🗺️ Mapa Ruta", "🎯 Penetración", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["📅 Frecuencia", "🗺️ Mapa Ruta", "🎯 Cobertura", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
     # 0. FRECUENCIA (CORREGIDO: USA NOMBRES DEL MAESTRO)
     with tabs[0]:
