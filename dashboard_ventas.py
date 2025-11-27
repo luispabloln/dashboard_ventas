@@ -265,10 +265,10 @@ if df_v is not None:
                     st.dataframe(df_map[['cliente', 'Status', 'Link']].sort_values('Status'), column_config={"Link": st.column_config.LinkColumn("Ir", display_text="📍")}, use_container_width=True)
         else: st.warning("Falta Maestro con Coordenadas.")
 
-    # 2. PENETRACIÓN
+    # 2. COBERTURA
     with tabs[2]:
         if df_a is not None:
-            st.header("🎯 Penetración")
+            st.header("🎯 Cobertura")
             v_list = dff['vendedor'].unique()
             df_a_uniq = df_a[['clienteid', 'vendedor']].drop_duplicates()
             df_a_filt = df_a_uniq[df_a_uniq['vendedor'].isin(v_list)]
