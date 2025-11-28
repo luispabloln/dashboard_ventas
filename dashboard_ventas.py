@@ -222,7 +222,7 @@ if df_v is not None:
 
     st.markdown("---")
     
-    tabs = st.tabs(["🚫 Rebotes", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🚫 Rebotes", "🎯 Cobertura", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
     # 0. REBOTES
     with tabs[0]:
@@ -282,7 +282,7 @@ if df_v is not None:
     # 1. PENETRACIÓN
     with tabs[1]:
         if df_a is not None:
-            st.header("🎯 Penetración de Cartera")
+            st.header("🎯 Cobertura de Cartera")
             total_asig = df_a_filt['clienteid'].nunique()
             total_serv = dff['clienteid'].nunique()
             total_no_serv = total_asig - total_serv
