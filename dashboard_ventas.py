@@ -137,7 +137,7 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v37.4")
+    st.title("🚛 Hupa Dashboard")
     st.success("KPIs de Cluster Activos")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
