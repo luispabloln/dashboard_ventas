@@ -6,81 +6,18 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v37.3", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Master Sales Command v37.4", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-        background-color: #F8F9FA;
-        color: #212529;
-    }
-    /* SIDEBAR */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E9ECEF;
-    }
-    [data-testid="stSidebar"] .css-17lntkn {
-        color: #495057;
-    }
-    /* TARJETAS KPI */
-    .metric-card {
-        background-color: #FFFFFF;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        border: 1px solid #E9ECEF;
-        text-align: left;
-        transition: transform 0.2s ease-in-out;
-    }
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    .metric-title {
-        color: #868E96;
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-        letter-spacing: 0.5px;
-    }
-    .metric-value {
-        color: #212529;
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin: 0;
-    }
-    .metric-delta {
-        font-size: 0.9rem;
-        font-weight: 500;
-        margin-top: 4px;
-    }
-    /* COLORES DELTA */
-    .delta-pos { color: #2ECC71; }
-    .delta-neg { color: #E74C3C; }
-    .delta-neu { color: #ADB5BD; }
-    
-    /* ALERTAS */
-    .alert-box {
-        padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        font-weight: 500;
-        border: 1px solid transparent;
-    }
-    .alert-danger { background-color: #FFF5F5; border-color: #FFC9C9; color: #C92A2A; }
-    .alert-warning { background-color: #FFF9DB; border-color: #FFEC99; color: #E67700; }
-    .alert-success { background-color: #EBFBEE; border-color: #B2F2BB; color: #2B8A3E; }
-
-    /* HEADERS */
-    h1, h2, h3 {
-        color: #343A40;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #F4F6F9; color: #2C3E50; }
+    .metric-card { background-color: #FFFFFF; border-radius: 12px; padding: 15px; border: 1px solid #E5E8EB; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; }
+    .alert-box { padding: 15px; border-radius: 8px; margin-bottom: 15px; font-weight: 500; }
+    .alert-danger { background-color: #FDEDEC; border-left: 5px solid #E74C3C; color: #C0392B; }
+    .alert-warning { background-color: #FFF3CD; border-left: 5px solid #FFC107; color: #856404; }
+    .alert-success { background-color: #EAFAF1; border-left: 5px solid #2ECC71; color: #27AE60; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -198,26 +135,29 @@ def load_consolidated_data():
     return df_v, df_p, df_a, df_r
 
 # --- INTERFAZ ---
+with st.sidebar:
+    st.title("💎 Master Dashboard v37.3")
+    st.success("Velocímetro Agregado")
+    st.markdown("---")
+    meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
+
 df_v, df_p, df_a, df_r = load_consolidated_data()
 
-with st.sidebar:
-    st.title("📊 Sales Command")
-    st.markdown("---")
-    
-    if df_v is not None:
-        # Filtros Sidebar
-        canales_list = sorted(df_v['canal'].dropna().unique().tolist())
-        sel_canal = st.multiselect("Filtrar Canal", canales_list, default=canales_list)
-        
-        dff_canal = df_v[df_v['canal'].isin(sel_canal)].copy()
-        vendedores_list = sorted(dff_canal['vendedor'].dropna().unique().tolist())
-        sel_vendedor = st.selectbox("Filtrar Vendedor", ["Todos"] + vendedores_list)
-        
-        st.markdown("---")
-        st.subheader("🎯 Objetivos")
-        meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
-
 if df_v is not None:
+    
+    # --- FILTROS ---
+    col_filt1, col_filt2 = st.sidebar.columns(2)
+    
+    # 1. Filtro Canal
+    canales_list = sorted(df_v['canal'].dropna().unique().tolist())
+    sel_canal = st.sidebar.multiselect("Filtrar por Canal:", canales_list, default=canales_list)
+    
+    # Filtrar primero por canal
+    dff_canal = df_v[df_v['canal'].isin(sel_canal)].copy()
+    
+    # 2. Filtro Vendedor (Dependiente del Canal)
+    vendedores_list = sorted(dff_canal['vendedor'].dropna().unique().tolist())
+    sel_vendedor = st.sidebar.selectbox("Filtrar por Vendedor:", ["Todos"] + vendedores_list)
     
     # Aplicar filtro final
     if sel_vendedor != "Todos":
@@ -236,54 +176,54 @@ if df_v is not None:
     trx = dff['id_transaccion'].nunique()
     ticket = tot/trx if trx>0 else 0
     
-    # --- HEADER KPIs (ESTILO PROFESSIONAL) ---
-    c1, c2, c3, c4 = st.columns(4)
+    # --- HEADER KPIs (CON VELOCIMETRO) ---
+    c_gauge, c_kpis = st.columns([1, 2])
     
-    with c1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Ventas Totales</div>
-            <div class="metric-value">${tot:,.0f}</div>
-            <div class="metric-delta delta-pos">Actual</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with c_gauge:
+        # Calculo para velocímetro (Meta dinámica si es por vendedor individual)
+        current_meta = meta if sel_vendedor == "Todos" else (meta/10) # Ajuste simple de meta para vendedor individual (mejora: usar meta real por vendedor si existe)
         
-    with c2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Cobertura</div>
-            <div class="metric-value">{cob}</div>
-            <div class="metric-delta delta-neu">Clientes Únicos</div>
-        </div>
-        """, unsafe_allow_html=True)
+        fig_g = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = tot,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "Progreso Meta", 'font': {'size': 16}},
+            delta = {'reference': current_meta, 'increasing': {'color': "green"}},
+            gauge = {
+                'axis': {'range': [None, current_meta*1.2]},
+                'bar': {'color': "#2C3E50"},
+                'steps': [
+                    {'range': [0, current_meta*0.7], 'color': '#ffeeee'},
+                    {'range': [current_meta*0.7, current_meta], 'color': '#fff8e1'}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': current_meta}}))
+        fig_g.update_layout(height=250, margin=dict(t=30,b=10,l=30,r=30))
+        st.plotly_chart(fig_g, use_container_width=True)
         
-    with c3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Ticket Promedio</div>
-            <div class="metric-value">${ticket:,.0f}</div>
-            <div class="metric-delta delta-neu">Por Transacción</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with c_kpis:
+        st.markdown("<br>", unsafe_allow_html=True)
+        ck1, ck2, ck3 = st.columns(3)
         
-    with c4:
-        # Calculo simple de rechazo para KPI
+        with ck1:
+            st.markdown(f"""<div class="metric-card"><div class="metric-title">Ventas Totales</div><div class="metric-value">${tot:,.0f}</div><div class="metric-delta delta-pos">Actual</div></div>""", unsafe_allow_html=True)
+            
+        with ck2:
+            st.markdown(f"""<div class="metric-card"><div class="metric-title">Cobertura</div><div class="metric-value">{cob}</div><div class="metric-delta delta-neu">Clientes</div></div>""", unsafe_allow_html=True)
+            
+        with ck3:
+            st.markdown(f"""<div class="metric-card"><div class="metric-title">Ticket Promedio</div><div class="metric-value">${ticket:,.0f}</div><div class="metric-delta delta-neu">Por Venta</div></div>""", unsafe_allow_html=True)
+            
+        # Rechazo KPI
         rechazo_val = 0
         if df_p is not None and 'monto_pre' in df_p_filt.columns:
             rechazo_val = df_p_filt['monto_pre'].sum() - tot
-        
-        delta_class = "delta-neg" if rechazo_val > 0 else "delta-pos"
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Rechazo Estimado</div>
-            <div class="metric-value">${rechazo_val:,.0f}</div>
-            <div class="metric-delta {delta_class}">Monto Perdido</div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f'<div class="alert-box alert-warning" style="margin-top:10px;">📉 <b>Rechazo Estimado:</b> ${rechazo_val:,.0f}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
     
-    # --- PESTAÑAS PRINCIPALES ---
     tabs = st.tabs(["🚫 Rebotes", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
     # 0. REBOTES
@@ -312,7 +252,6 @@ if df_v is not None:
             total_rechazo = df_r_local['monto_rechazo'].sum()
             cant_rebotes = len(df_r_local)
             
-            # Mini KPIs Rebotes
             mr1, mr2 = st.columns(2)
             mr1.markdown(f'<div class="alert-box alert-danger">💰 <b>Monto Rechazado:</b> ${total_rechazo:,.0f}</div>', unsafe_allow_html=True)
             mr2.markdown(f'<div class="alert-box alert-warning">📦 <b>Cantidad Rebotes:</b> {cant_rebotes}</div>', unsafe_allow_html=True)
@@ -337,6 +276,9 @@ if df_v is not None:
                     st.subheader("Detalle")
                     cols_view = [c for c in ['fecha_filtro', 'distribuidor', 'zona', 'cliente', 'monto_rechazo', 'motivo_rechazo'] if c in df_r_local.columns]
                     st.dataframe(df_r_local[cols_view].sort_values('monto_rechazo', ascending=False), use_container_width=True)
+            
+            st.subheader("📋 Listado Completo de Rebotes (Filtrado)")
+            st.dataframe(df_r_local, use_container_width=True)
         else: st.warning("Carga 'rebotes.csv'.")
 
     # 1. PENETRACIÓN
@@ -361,15 +303,16 @@ if df_v is not None:
                 pen['% Pen'] = (pen['Servidos'] / pen['Asignados'].replace(0, 1)) * 100
                 pen['Gap'] = pen['Asignados'] - pen['Servidos']
                 
+                st.dataframe(pen.sort_values('% Pen', ascending=False).style.format({'% Pen': '{:.1f}%'}), use_container_width=True)
+                
                 fig_p = go.Figure(data=[
-                    go.Bar(name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', marker_color='#2ECC71'),
-                    go.Bar(name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', marker_color='#E74C3C')
+                    go.Bar(name='Servidos', y=pen['vendedor'], x=pen['Servidos'], orientation='h', marker_color='#2ECC71', text=pen['Servidos'], textposition='auto'),
+                    go.Bar(name='Sin Compra', y=pen['vendedor'], x=pen['Gap'], orientation='h', marker_color='#E74C3C', text=pen['Gap'], textposition='auto')
                 ])
                 fig_p.update_layout(barmode='stack', height=500, title="Cobertura de Cartera")
                 st.plotly_chart(fig_p, use_container_width=True)
-                st.dataframe(pen.sort_values('% Pen', ascending=False).style.format({'% Pen': '{:.1f}%'}), use_container_width=True)
             else:
-                st.subheader(f"📋 Detalle - {sel_vendedor}")
+                st.subheader(f"📋 Detalle de Clientes - {sel_vendedor}")
                 clientes_maestro = df_a_filt[['clienteid', 'cliente']].drop_duplicates()
                 clientes_con_compra = set(dff['clienteid'].unique())
                 clientes_maestro['Estado'] = clientes_maestro['clienteid'].apply(lambda x: '✅ Visitado' if x in clientes_con_compra else '❌ Pendiente')
@@ -408,8 +351,18 @@ if df_v is not None:
                                       color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
                 st.plotly_chart(fig_pie_freq, use_container_width=True)
             with c_f2:
-                st.subheader("Clientes Fuera de Modelo")
-                st.dataframe(df_freq[df_freq['Estado'].isin(['Baja (<3)', 'Sin Compra (0)'])][['cliente', 'frecuencia_real', 'Estado']].sort_values('frecuencia_real'), use_container_width=True)
+                freq_vend = df_freq.groupby(['vendedor', 'Estado']).size().reset_index(name='Count')
+                total_vend = freq_vend.groupby('vendedor')['Count'].transform('sum')
+                freq_vend['Pct'] = (freq_vend['Count'] / total_vend) * 100
+                fig_bar_freq = px.bar(freq_vend, x='Pct', y='vendedor', color='Estado', orientation='h', 
+                                   title="Cumplimiento por Vendedor (%)", text='Pct',
+                                   color_discrete_map={'Sin Compra (0)': '#95A5A6', 'Baja (<3)': '#E74C3C', 'En Modelo (3-5)': '#2ECC71', 'Alta (>5)': '#3498DB'})
+                fig_bar_freq.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+                st.plotly_chart(fig_bar_freq, use_container_width=True)
+            
+            st.subheader("📋 Clientes Fuera de Modelo")
+            tabla_baja = df_freq[df_freq['Estado'].isin(['Baja (<3)', 'Sin Compra (0)'])]
+            st.dataframe(tabla_baja[['vendedor', 'clienteid', 'cliente', 'frecuencia_real', 'Estado']].sort_values('frecuencia_real'), use_container_width=True)
         else: st.warning("Carga Maestro.")
 
     # 3. MAPA
@@ -454,14 +407,17 @@ if df_v is not None:
             m['diff'] = m['monto_pre'] - m['monto_real']
             m['st'] = m.apply(lambda x: 'Entregado' if x['diff']<=5 else 'Rechazo', axis=1)
             c1, c2 = st.columns(2)
+            
             fig_pie = px.pie(m, names='st', values='monto_pre', title="Estatus ($)")
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             c1.plotly_chart(fig_pie, use_container_width=True)
             
             m_det = pd.merge(df_p_filt, ven_g, left_on='id_cruce', right_on='preventaid', how='left').fillna(0)
             m_det['caida'] = m_det['monto_pre'] - m_det['monto_real']
             if sel_vendedor == "Todos":
                 top_drop = m_det.groupby('vendedor')['caida'].sum().sort_values(ascending=False).head(10).reset_index()
-                fig_bar = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", color='caida', color_continuous_scale='Reds')
+                fig_bar = px.bar(top_drop, x='caida', y='vendedor', orientation='h', title="Top Rechazos", text='caida', color='caida', color_continuous_scale='Reds')
+                fig_bar.update_traces(texttemplate='$%{text:,.0f}', textposition='outside')
                 c2.plotly_chart(fig_bar, use_container_width=True)
             else:
                 c2.metric("Monto Perdido", f"${m_det['caida'].sum():,.0f}")
@@ -483,10 +439,11 @@ if df_v is not None:
         st.header("📈 Estrategia")
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6'))
-        fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3)))
+        fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'))
+        fig.add_trace(go.Scatter(x=day['fecha'], y=day['clienteid'], name='Clientes', yaxis='y2', line=dict(color='#3498DB', width=3), mode='lines+markers+text', text=day['clienteid'], textposition='top center'))
         fig.update_layout(yaxis2=dict(overlaying='y', side='right'), title="Venta vs Clientes", height=600)
         st.plotly_chart(fig, use_container_width=True)
+        
         if sel_vendedor == "Todos":
             sun = dff.groupby(['canal', 'vendedor'])['monto_real'].sum().reset_index()
             st.plotly_chart(px.sunburst(sun, path=['canal', 'vendedor'], values='monto_real'), use_container_width=True)
@@ -495,7 +452,9 @@ if df_v is not None:
     with tabs[7]:
         st.header("💳 Finanzas")
         pay = dff.groupby('tipopago')['monto_real'].sum().reset_index()
-        st.plotly_chart(px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago"), use_container_width=True)
+        fig_pay = px.pie(pay, values='monto_real', names='tipopago', title="Mix Pago")
+        fig_pay.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_pay, use_container_width=True)
         if 'Crédito' in pay['tipopago'].values:
             cred = dff[dff['tipopago'].str.contains('Crédito', case=False, na=False)]
             st.dataframe(cred.groupby('vendedor')['monto_real'].sum().sort_values(ascending=False).head(10))
@@ -513,11 +472,17 @@ if df_v is not None:
                 ctot = cd['monto_real'].sum()
                 top_p = cd.groupby('producto')['monto_real'].sum().nlargest(10).reset_index()
                 c1.metric("Total", f"${ctot:,.0f}")
-                c2.plotly_chart(px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos"), use_container_width=True)
+                fig_cp = px.bar(top_p, x='monto_real', y='producto', orientation='h', title="Top Productos", text='monto_real')
+                fig_cp.update_traces(texttemplate='$%{text:,.0f}', textposition='inside')
+                c2.plotly_chart(fig_cp, use_container_width=True)
+        
         w1 = df_v['fecha'].min() + datetime.timedelta(days=7)
         wl = df_v['fecha'].max() - datetime.timedelta(days=7)
         churn = list(set(dff[dff['fecha']<=w1]['clienteid']) - set(dff[dff['fecha']>=wl]['clienteid']))
         st.error(f"⚠️ {len(churn)} Clientes en Riesgo")
+        if churn:
+            churn_df = dff[dff['clienteid'].isin(churn)].groupby(['cliente', 'vendedor'])['monto_real'].sum().reset_index().sort_values('monto_real', ascending=False)
+            st.dataframe(churn_df.head(10), use_container_width=True)
 
     # 9. AUDITORIA
     with tabs[9]:
@@ -526,13 +491,16 @@ if df_v is not None:
         j1_o = sorted(dff['jerarquia1'].dropna().unique()) if 'jerarquia1' in dff.columns else []
         cat_o = sorted(dff['categoria'].dropna().unique()) if 'categoria' in dff.columns else []
         prod_o = sorted(dff['producto'].dropna().unique()) if 'producto' in dff.columns else []
+        
         s_j1 = cf1.multiselect("Jerarquía 1", j1_o)
         s_cat = cf2.multiselect("Categoría", cat_o)
         s_prod = cf3.multiselect("Producto", prod_o)
+        
         df_aud = dff.copy()
         if s_j1: df_aud = df_aud[df_aud['jerarquia1'].isin(s_j1)]
         if s_cat: df_aud = df_aud[df_aud['categoria'].isin(s_cat)]
         if s_prod: df_aud = df_aud[df_aud['producto'].isin(s_prod)]
+        
         col_hm = 'producto' if s_prod else ('categoria' if s_cat else 'jerarquia1')
         if col_hm in df_aud.columns:
             piv = df_aud.groupby(['vendedor', col_hm])['monto_real'].sum().reset_index().pivot(index='vendedor', columns=col_hm, values='monto_real').fillna(0)
