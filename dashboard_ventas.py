@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v37.4", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Hupa Dashboard", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
