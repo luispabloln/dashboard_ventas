@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Master Sales Command v37.6", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Master Sales Command v37.7", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -99,17 +99,31 @@ def load_consolidated_data():
                     df_a = df_a.dropna(subset=['latitud', 'longitud'])
                     df_a = df_a[(df_a['latitud'] != 0) & (df_a['longitud'] != 0)]
 
-    # 3. CARGAR PREVENTA
+    # 3. CARGAR PREVENTA (CORRECCIÓN DE FILAS DUPLICADAS)
     if file_preventa:
         df_p = read_smart(file_preventa)
         if df_p is not None and 'fecha' in df_p.columns:
             df_p['fecha'] = pd.to_datetime(df_p['fecha'], format='%d/%m/%Y', dayfirst=True, errors='coerce')
-            if 'monto_final' in df_p.columns: df_p['monto_pre'] = df_p['monto_final']
-            elif 'monto' in df_p.columns: df_p['monto_pre'] = df_p['monto']
-            else: df_p['monto_pre'] = 0
+            
+            # Normalización de columna monto
+            col_monto_pre = next((c for c in df_p.columns if 'monto' in c and ('final' in c or 'pre' in c or 'total' in c)), None)
+            if not col_monto_pre: col_monto_pre = 'monto' # Fallback
+            
+            if col_monto_pre in df_p.columns:
+                # Limpieza de caracteres no numéricos si es necesario (ej: $)
+                if df_p[col_monto_pre].dtype == object:
+                     df_p[col_monto_pre] = pd.to_numeric(df_p[col_monto_pre].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce')
+                
+                df_p['monto_pre'] = df_p[col_monto_pre].fillna(0)
+            else:
+                df_p['monto_pre'] = 0
+
             col_pre = next((c for c in df_p.columns if 'nro' in c and 'preventa' in c), None)
             if col_pre: df_p['id_cruce'] = df_p[col_pre]
-    
+            
+            # Eliminar duplicados si existen lineas identicas
+            df_p = df_p.drop_duplicates()
+
     # 4. CARGAR REBOTES
     if file_rebotes:
         df_r = read_smart(file_rebotes)
@@ -136,8 +150,8 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("💎 Master Dashboard v37.6")
-    st.success("Módulo Rebotes Mejorado")
+    st.title("💎 Master Dashboard v37.7")
+    st.success("Corrección Monto Preventa")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
@@ -189,7 +203,7 @@ if df_v is not None:
     
     tabs = st.tabs(["🚫 Rebotes", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 0. REBOTES (NUEVO MODULO CON FILTROS Y GRÁFICO PREVENTA VS VENTA)
+    # 0. REBOTES
     with tabs[0]:
         st.header("🚫 Análisis de Rebotes (Devoluciones)")
         
@@ -220,19 +234,15 @@ if df_v is not None:
             mr1.markdown(f'<div class="alert-box alert-danger">💰 <b>Monto Rechazado:</b> ${total_rechazo:,.0f}</div>', unsafe_allow_html=True)
             mr2.markdown(f'<div class="alert-box alert-warning">📦 <b>Cantidad Rebotes:</b> {cant_rebotes}</div>', unsafe_allow_html=True)
             
-            # --- NUEVO GRÁFICO: MONTO PREVENTA VS VENTA ---
+            # GRÁFICO PREVENTA VS VENTA (CORREGIDO)
             if df_p is not None and 'monto_pre' in df_p_filt.columns:
-                # Nota: total_rechazo ya está filtrado por las condiciones locales.
-                # Para una comparación visual rápida, usamos la Preventa TOTAL del vendedor/canal seleccionado
-                # y le restamos el rechazo CALCULADO (que puede tener filtros extra).
-                # Si los filtros de Rebotes son muy específicos, esta comparación es referencial.
-                
                 total_preventa_base = df_p_filt['monto_pre'].sum()
                 
                 if total_preventa_base > 0:
-                    # Ajuste: Si el rechazo filtrado es mayor que la preventa base (raro pero posible por filtros desfasados), topeamos.
-                    rechazo_grafico = min(total_rechazo, total_preventa_base)
-                    venta_grafico = total_preventa_base - rechazo_grafico
+                    rechazo_grafico = min(total_rechazo, total_preventa_base) # Evitar rechazo > preventa visualmente
+                    venta_grafico = max(0, total_preventa_base - rechazo_grafico)
+                    
+                    pct_rebote = (total_rechazo / total_preventa_base) * 100
                     
                     df_comp = pd.DataFrame({
                         'Concepto': ['Venta Efectiva (Aprox)', 'Rechazo (Filtrado)'],
@@ -240,16 +250,13 @@ if df_v is not None:
                     })
                     
                     fig_comp = px.pie(df_comp, values='Monto', names='Concepto', 
-                                      title=f"Preventa Total: ${total_preventa_base:,.0f}",
+                                      title=f"Impacto de Rebotes sobre Preventa Total ({pct_rebote:.1f}%)",
                                       color='Concepto',
                                       color_discrete_map={'Venta Efectiva (Aprox)': '#2ECC71', 'Rechazo (Filtrado)': '#E74C3C'})
                     st.plotly_chart(fig_comp, use_container_width=True)
                 else:
-                    st.info("No hay datos de Preventa base para comparar.")
-            else:
-                st.warning("Carga Preventas para ver comparación Preventa vs Venta.")
-            # -----------------------------------------------
-
+                    st.info(f"Monto Preventa Base es 0. Verifica filtros o datos.")
+            
             col_reb1, col_reb2 = st.columns([1, 2])
             with col_reb1:
                 col_motivo = next((c for c in df_r_local.columns if 'motivo' in c), None)
@@ -290,7 +297,6 @@ if df_v is not None:
             kp2.metric("Visitados", total_serv)
             kp3.metric("No Visitados", total_no_serv)
             kp4.metric("Efectividad", f"{efectividad:.1f}%")
-            
             if sel_vendedor == "Todos":
                 asig = df_a_filt.groupby('vendedor')['clienteid'].nunique().reset_index(name='Asignados')
                 serv = dff.groupby('vendedor')['clienteid'].nunique().reset_index(name='Servidos')
