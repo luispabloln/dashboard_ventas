@@ -6,7 +6,7 @@ import datetime
 import os
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Hupa Dashboard", page_icon="🚛", layout="wide")
+st.set_page_config(page_title="Master Sales Command v37.5", page_icon="💎", layout="wide")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -137,8 +137,8 @@ def load_consolidated_data():
 
 # --- INTERFAZ ---
 with st.sidebar:
-    st.title("🚛 Hupa Dashboard")
-    st.success("KPIs de Cluster Activos")
+    st.title("💎 Master Dashboard v37.5")
+    st.success("Gráfico Pastel Rebotes vs Preventa")
     st.markdown("---")
     meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
 
@@ -171,7 +171,7 @@ if df_v is not None:
     trx = dff['id_transaccion'].nunique()
     ticket = tot/trx if trx>0 else 0
     
-    # --- HEADER KPIs (CON VELOCIMETRO y CLUSTER) ---
+    # --- HEADER KPIs ---
     c_gauge, c_kpis = st.columns([1, 2])
     
     with c_gauge:
@@ -192,8 +192,6 @@ if df_v is not None:
         
     with c_kpis:
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Calculo Cluster Lider
         has_cluster = 'cluster' in dff.columns
         ck1, ck2, ck3, ck4 = st.columns(4)
         
@@ -203,8 +201,6 @@ if df_v is not None:
             st.markdown(f"""<div class="metric-card"><div class="metric-title">Cobertura</div><div class="metric-value">{cob}</div><div class="metric-delta delta-neu">Clientes</div></div>""", unsafe_allow_html=True)
         with ck3:
             st.markdown(f"""<div class="metric-card"><div class="metric-title">Ticket Promedio</div><div class="metric-value">${ticket:,.0f}</div><div class="metric-delta delta-neu">Por Venta</div></div>""", unsafe_allow_html=True)
-        
-        # TARJETA CLUSTER (NUEVA)
         with ck4:
             if has_cluster and not dff.empty:
                 top_cluster = dff.groupby('cluster')['monto_real'].sum().sort_values(ascending=False).head(1)
@@ -214,7 +210,6 @@ if df_v is not None:
             else:
                 st.markdown(f"""<div class="metric-card"><div class="metric-title">Cluster Líder</div><div class="metric-value">-</div><div class="metric-delta">Sin Datos</div></div>""", unsafe_allow_html=True)
             
-        # Rechazo KPI
         rechazo_val = 0
         if df_p is not None and 'monto_pre' in df_p_filt.columns:
             rechazo_val = df_p_filt['monto_pre'].sum() - tot
@@ -222,13 +217,16 @@ if df_v is not None:
 
     st.markdown("---")
     
-    tabs = st.tabs(["🚫 Rebotes", "🎯 Cobertura", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
+    tabs = st.tabs(["🚫 Rebotes", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 0. REBOTES
+    # 0. REBOTES (MODIFICADO: Gráfico Pastel Rebote vs Preventa)
     with tabs[0]:
-        st.header("🚫 Análisis de Rebotes")
+        st.header("🚫 Análisis de Rebotes (Devoluciones)")
+        
         if df_r is not None:
+            # Filtros específicos para Rebotes
             c_fr1, c_fr2, c_fr3 = st.columns(3)
+            
             distribuidores = sorted(df_r['distribuidor'].dropna().unique()) if 'distribuidor' in df_r.columns else []
             zonas = sorted(df_r['zona'].dropna().unique()) if 'zona' in df_r.columns else []
             min_d_r = df_r['fecha_filtro'].min().date() if 'fecha_filtro' in df_r.columns else None
@@ -254,6 +252,28 @@ if df_v is not None:
             mr1.markdown(f'<div class="alert-box alert-danger">💰 <b>Monto Rechazado:</b> ${total_rechazo:,.0f}</div>', unsafe_allow_html=True)
             mr2.markdown(f'<div class="alert-box alert-warning">📦 <b>Cantidad Rebotes:</b> {cant_rebotes}</div>', unsafe_allow_html=True)
             
+            st.markdown("---")
+            
+            # --- GRAFICO NUEVO: % REBOTES VS PREVENTA TOTAL ---
+            if df_p is not None:
+                 # Calcular Preventa Total (filtrada por los mismos criterios si es posible, aquí usamos el global df_p_filt para simplificar concordancia vendedor)
+                 # Nota: Para mayor precisión, se deberían aplicar los mismos filtros de fecha/zona a la preventa, pero usaremos el filtro de vendedor actual.
+                 total_preventa = df_p_filt['monto_pre'].sum()
+                 
+                 # Asegurar que el rechazo no sea mayor que la preventa (por inconsistencia de datos)
+                 monto_final_ok = max(0, total_preventa - total_rechazo)
+                 
+                 labels = ['Venta Efectiva', 'Rebote (Rechazo)']
+                 values = [monto_final_ok, total_rechazo]
+                 
+                 fig_pie_preventa = px.pie(names=labels, values=values, title="Impacto del Rebote en la Preventa", 
+                                           color=labels, color_discrete_map={'Venta Efectiva': '#2ECC71', 'Rebote (Rechazo)': '#E74C3C'})
+                 st.plotly_chart(fig_pie_preventa, use_container_width=True)
+            else:
+                 st.warning("Se necesita cargar el archivo de Preventa para comparar el % de Rebote.")
+            
+            st.markdown("---")
+
             col_reb1, col_reb2 = st.columns([1, 2])
             with col_reb1:
                 col_motivo = next((c for c in df_r_local.columns if 'motivo' in c), None)
@@ -268,7 +288,7 @@ if df_v is not None:
                 if sel_vendedor == "Todos":
                     rebotes_vend = df_r_local.groupby('vendedor')['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
                     fig_bar_r = px.bar(rebotes_vend, x='monto_rechazo', y='vendedor', orientation='h', 
-                                       title="Rechazo por Vendedor", text_auto='.2s', color='monto_rechazo', color_continuous_scale='Reds')
+                                       title="Monto Rechazado por Vendedor", text_auto='.2s', color='monto_rechazo', color_continuous_scale='Reds')
                     st.plotly_chart(fig_bar_r, use_container_width=True)
                 else:
                     st.subheader("Detalle")
@@ -277,12 +297,14 @@ if df_v is not None:
             
             st.subheader("📋 Listado Completo de Rebotes (Filtrado)")
             st.dataframe(df_r_local, use_container_width=True)
-        else: st.warning("Carga 'rebotes.csv'.")
+            
+        else:
+            st.warning("⚠️ Carga el archivo 'rebotes.csv' en tu repositorio para ver este análisis.")
 
     # 1. PENETRACIÓN
     with tabs[1]:
         if df_a is not None:
-            st.header("🎯 Cobertura de Cartera")
+            st.header("🎯 Penetración de Cartera")
             total_asig = df_a_filt['clienteid'].nunique()
             total_serv = dff['clienteid'].nunique()
             total_no_serv = total_asig - total_serv
@@ -421,7 +443,6 @@ if df_v is not None:
     # 6. ESTRATEGIA
     with tabs[6]:
         st.header("📈 Estrategia")
-        # Gráfico Venta vs Clientes
         day = dff.groupby('fecha').agg({'monto_real':'sum', 'clienteid':'nunique'}).reset_index()
         fig = go.Figure()
         fig.add_trace(go.Bar(x=day['fecha'], y=day['monto_real'], name='Venta', marker_color='#95A5A6', text=day['monto_real'], texttemplate='$%{text:.2s}', textposition='auto'))
@@ -431,7 +452,6 @@ if df_v is not None:
         
         st.markdown("---")
         
-        # Gráfico Ventas por Cluster (NUEVO - Reemplazando o añadiendo)
         if 'cluster' in dff.columns:
             st.subheader("Ventas por Cluster")
             cluster_sales = dff.groupby('cluster')['monto_real'].sum().reset_index().sort_values('monto_real', ascending=True)
