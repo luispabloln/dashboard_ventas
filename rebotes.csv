@@ -1,4 +1,4 @@
-Nro Preventa,Fecha Preventa,Fecha Entrega,Vendedor,Distribuidor,Cliente,Zona,Motivo Rechazo,Monto Preventa,Monto Venta,Monto Rechazo,Porc. Rechazo
+Nro Preventa,Fecha Preventa,Fecha Entrega,Vendedor,Distribuidor,Cliente,Zona,Monto Preventa,Monto Venta,Monto Rechazo,Porc. Rechazo,Motivo Rechazo
 186762,31/10/2025,01/11/2025,RAFAEL SARDAN SALAZAR,WALTER MONTOYA,SUPERMERCADO TOTES .,UV-2,4933.4146,4672.6146,260.8,5.2864,Cliente Sin Dinero
 186764,31/10/2025,01/11/2025,PEDRO ROMERO ARDAYA,LUIS ALBERTO SORUCO,Blas Peña .,UV-144A,115.74996,37.74996,78,67.38663,Cliente Sin Dinero
 186771,31/10/2025,01/11/2025,PEDRO ROMERO ARDAYA,LUIS ALBERTO SORUCO,Blas Peña .,UV-144A,113.24988,37.74996,75.49992,66.66667,Cliente Sin Dinero
