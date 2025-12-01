@@ -99,7 +99,7 @@ def load_consolidated_data():
                     df_a = df_a.dropna(subset=['latitud', 'longitud'])
                     df_a = df_a[(df_a['latitud'] != 0) & (df_a['longitud'] != 0)]
 
-    # 3. CARGAR PREVENTA (CORRECCIÓN DE FILAS DUPLICADAS)
+   # 3. CARGAR PREVENTA (LECTURA HÍBRIDA INTELIGENTE)
     if file_preventa:
         df_p = read_smart(file_preventa)
         if df_p is not None and 'fecha' in df_p.columns:
@@ -107,12 +107,25 @@ def load_consolidated_data():
             
             # Normalización de columna monto
             col_monto_pre = next((c for c in df_p.columns if 'monto' in c and ('final' in c or 'pre' in c or 'total' in c)), None)
-            if not col_monto_pre: col_monto_pre = 'monto' # Fallback
+            if not col_monto_pre: col_monto_pre = 'monto'
             
             if col_monto_pre in df_p.columns:
-                # Limpieza de caracteres no numéricos si es necesario (ej: $)
-                if df_p[col_monto_pre].dtype == object:
-                     df_p[col_monto_pre] = pd.to_numeric(df_p[col_monto_pre].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce')
+                def clean_currency_hybrid(x):
+                    s = str(x).strip()
+                    # Si tiene coma, asumimos formato Latino/Europeo (1.000,00)
+                    if ',' in s:
+                        return s.replace('.', '').replace(',', '.')
+                    # Si no tiene coma, asumimos formato Estándar/Python (1000.00)
+                    return s
+
+                # Aplicar limpieza híbrida antes de convertir
+                df_p[col_monto_pre] = df_p[col_monto_pre].apply(clean_currency_hybrid)
+                
+                # Limpieza final de símbolos extraños (ej: $) y conversión
+                df_p[col_monto_pre] = pd.to_numeric(
+                    df_p[col_monto_pre].astype(str).str.replace(r'[^\d.]', '', regex=True), 
+                    errors='coerce'
+                )
                 
                 df_p['monto_pre'] = df_p[col_monto_pre].fillna(0)
             else:
@@ -121,7 +134,6 @@ def load_consolidated_data():
             col_pre = next((c for c in df_p.columns if 'nro' in c and 'preventa' in c), None)
             if col_pre: df_p['id_cruce'] = df_p[col_pre]
             
-            # Eliminar duplicados si existen lineas identicas
             df_p = df_p.drop_duplicates()
 
     # 4. CARGAR REBOTES
