@@ -165,7 +165,7 @@ with st.sidebar:
     st.title("💎 Master Dashboard v37.7")
     st.success("Corrección Monto Preventa")
     st.markdown("---")
-    meta = st.number_input("Meta Mensual ($)", value=2500000, step=100000)
+    meta = st.number_input("Meta Mensual ($)", value=3600000, step=100000)
 
 df_v, df_p, df_a, df_r = load_consolidated_data()
 
