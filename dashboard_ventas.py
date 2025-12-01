@@ -278,6 +278,15 @@ if df_v is not None:
                     cols_view = [c for c in ['fecha_filtro', 'distribuidor', 'zona', 'cliente', 'monto_rechazo', 'motivo_rechazo'] if c in df_r_local.columns]
                     st.dataframe(df_r_local[cols_view].sort_values('monto_rechazo', ascending=False), use_container_width=True)
             
+            # --- NUEVO GRÁFICO: REBOTE POR DISTRIBUIDOR ---
+            if 'distribuidor' in df_r_local.columns:
+                st.markdown("---")
+                rebotes_dist = df_r_local.groupby('distribuidor')['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
+                fig_bar_d = px.bar(rebotes_dist, x='monto_rechazo', y='distribuidor', orientation='h',
+                                   title="🏢 Rechazo por Distribuidor", text_auto='.2s', color='monto_rechazo', color_continuous_scale='OrRd')
+                st.plotly_chart(fig_bar_d, use_container_width=True)
+            # ----------------------------------------------
+
             st.subheader("📋 Listado Completo de Rebotes (Filtrado)")
             st.dataframe(df_r_local, use_container_width=True)
             
