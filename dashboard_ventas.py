@@ -201,14 +201,22 @@ if df_v is not None:
         fig_g = go.Figure(go.Indicator(mode="gauge+number+delta", value=tot, delta={'reference': meta if sel_vendedor == "Todos" else meta/10}, gauge={'axis':{'range':[None, meta*1.2 if sel_vendedor=="Todos" else (meta/10)*1.2]}, 'bar':{'color':"#2C3E50"}}))
         fig_g.update_layout(height=200, margin=dict(t=20,b=20,l=30,r=30))
         st.plotly_chart(fig_g, use_container_width=True)
-    with c2:
+with c2:
         st.markdown("<br>", unsafe_allow_html=True)
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Ventas", f"${tot:,.0f}")
-        k2.metric("Cobertura", f"{cob}")
-        k3.metric("Ticket", f"${ticket:,.0f}")
+        
+        # Cálculo del Monto Preventa
+        monto_preventa = df_p_filt['monto_pre'].sum() if df_p is not None and 'monto_pre' in df_p_filt.columns else 0
+        
+        # Se amplía a 4 columnas para incluir la nueva métrica
+        k1, k2, k3, k4 = st.columns(4)
+        
+        k1.metric("Preventa", f"${monto_preventa:,.0f}")
+        k2.metric("Venta Real", f"${tot:,.0f}")
+        k3.metric("Cobertura", f"{cob}")
+        k4.metric("Ticket", f"${ticket:,.0f}")
+        
         if df_p is not None and 'monto_pre' in df_p_filt.columns:
-            caida = df_p_filt['monto_pre'].sum() - tot
+            caida = monto_preventa - tot
             st.markdown(f'<div class="alert-box alert-warning">📉 Rechazo Estimado: ${caida:,.0f}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
