@@ -201,7 +201,7 @@ if df_v is not None:
         fig_g = go.Figure(go.Indicator(mode="gauge+number+delta", value=tot, delta={'reference': meta if sel_vendedor == "Todos" else meta/10}, gauge={'axis':{'range':[None, meta*1.2 if sel_vendedor=="Todos" else (meta/10)*1.2]}, 'bar':{'color':"#2C3E50"}}))
         fig_g.update_layout(height=200, margin=dict(t=20,b=20,l=30,r=30))
         st.plotly_chart(fig_g, use_container_width=True)
-with c2:
+    with c2:
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Cálculo del Monto Preventa
