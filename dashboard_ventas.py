@@ -192,6 +192,7 @@ if df_v is not None:
         if df_r is not None: df_r_filt = df_r.copy()
     
     tot = dff['monto_real'].sum()
+    prev = df_p['monto_pre'].sum()
     cob = dff['clienteid'].nunique()
     trx = dff['id_transaccion'].nunique()
     ticket = tot/trx if trx>0 else 0
