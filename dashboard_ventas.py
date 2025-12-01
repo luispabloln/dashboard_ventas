@@ -203,7 +203,7 @@ if df_v is not None:
     
     tabs = st.tabs(["🚫 Rebotes", "🎯 Penetración", "📅 Frecuencia", "🗺️ Mapa Ruta", "📉 Caída", "🎮 Simulador", "📈 Estrategia", "💳 Finanzas", "👥 Clientes", "🔍 Auditoría", "🧠 Inteligencia"])
     
-    # 0. REBOTES
+   # 0. REBOTES
     with tabs[0]:
         st.header("🚫 Análisis de Rebotes (Devoluciones)")
         
@@ -234,12 +234,12 @@ if df_v is not None:
             mr1.markdown(f'<div class="alert-box alert-danger">💰 <b>Monto Rechazado:</b> ${total_rechazo:,.0f}</div>', unsafe_allow_html=True)
             mr2.markdown(f'<div class="alert-box alert-warning">📦 <b>Cantidad Rebotes:</b> {cant_rebotes}</div>', unsafe_allow_html=True)
             
-            # GRÁFICO PREVENTA VS VENTA (CORREGIDO)
+            # GRÁFICO PREVENTA VS VENTA
             if df_p is not None and 'monto_pre' in df_p_filt.columns:
                 total_preventa_base = df_p_filt['monto_pre'].sum()
                 
                 if total_preventa_base > 0:
-                    rechazo_grafico = min(total_rechazo, total_preventa_base) # Evitar rechazo > preventa visualmente
+                    rechazo_grafico = min(total_rechazo, total_preventa_base)
                     venta_grafico = max(0, total_preventa_base - rechazo_grafico)
                     
                     pct_rebote = (total_rechazo / total_preventa_base) * 100
@@ -257,13 +257,16 @@ if df_v is not None:
                 else:
                     st.info(f"Monto Preventa Base es 0. Verifica filtros o datos.")
             
+            # Identificar columna motivo antes de usarla
+            col_motivo = next((c for c in df_r_local.columns if 'motivo' in c), None)
+
             col_reb1, col_reb2 = st.columns([1, 2])
             with col_reb1:
-                col_motivo = next((c for c in df_r_local.columns if 'motivo' in c), None)
                 if col_motivo:
+                    # Gráfico de Pastel por Cantidad (Frecuencia)
                     rechazo_motivo = df_r_local[col_motivo].value_counts().reset_index()
                     rechazo_motivo.columns = ['Motivo', 'Cantidad']
-                    fig_pie_r = px.pie(rechazo_motivo, values='Cantidad', names='Motivo', title="Motivos de Rechazo", color_discrete_sequence=px.colors.sequential.RdBu)
+                    fig_pie_r = px.pie(rechazo_motivo, values='Cantidad', names='Motivo', title="Frecuencia de Motivos", color_discrete_sequence=px.colors.sequential.RdBu)
                     st.plotly_chart(fig_pie_r, use_container_width=True)
                 else: st.info("Sin columna 'Motivo'")
 
@@ -278,14 +281,25 @@ if df_v is not None:
                     cols_view = [c for c in ['fecha_filtro', 'distribuidor', 'zona', 'cliente', 'monto_rechazo', 'motivo_rechazo'] if c in df_r_local.columns]
                     st.dataframe(df_r_local[cols_view].sort_values('monto_rechazo', ascending=False), use_container_width=True)
             
-            # --- NUEVO GRÁFICO: REBOTE POR DISTRIBUIDOR ---
-            if 'distribuidor' in df_r_local.columns:
-                st.markdown("---")
-                rebotes_dist = df_r_local.groupby('distribuidor')['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
-                fig_bar_d = px.bar(rebotes_dist, x='monto_rechazo', y='distribuidor', orientation='h',
-                                   title="🏢 Rechazo por Distribuidor", text_auto='.2s', color='monto_rechazo', color_continuous_scale='OrRd')
-                st.plotly_chart(fig_bar_d, use_container_width=True)
-            # ----------------------------------------------
+            st.markdown("---")
+            
+            # --- NUEVOS GRÁFICOS: POR DISTRIBUIDOR Y POR MOTIVO (MONTO) ---
+            c_g1, c_g2 = st.columns(2)
+            
+            with c_g1:
+                if 'distribuidor' in df_r_local.columns:
+                    rebotes_dist = df_r_local.groupby('distribuidor')['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
+                    fig_bar_d = px.bar(rebotes_dist, x='monto_rechazo', y='distribuidor', orientation='h',
+                                       title="🏢 Rechazo por Distribuidor ($)", text_auto='.2s', color='monto_rechazo', color_continuous_scale='OrRd')
+                    st.plotly_chart(fig_bar_d, use_container_width=True)
+            
+            with c_g2:
+                if col_motivo:
+                    rebotes_mot_monto = df_r_local.groupby(col_motivo)['monto_rechazo'].sum().sort_values(ascending=False).reset_index()
+                    fig_bar_m = px.bar(rebotes_mot_monto, x='monto_rechazo', y=col_motivo, orientation='h',
+                                       title="📉 Rechazo por Motivo ($)", text_auto='.2s', color='monto_rechazo', color_continuous_scale='Reds')
+                    st.plotly_chart(fig_bar_m, use_container_width=True)
+            # -----------------------------------------------------------------
 
             st.subheader("📋 Listado Completo de Rebotes (Filtrado)")
             st.dataframe(df_r_local, use_container_width=True)
