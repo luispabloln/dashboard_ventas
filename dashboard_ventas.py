@@ -245,30 +245,7 @@ if df_v is not None:
             mr1, mr2 = st.columns(2)
             mr1.markdown(f'<div class="alert-box alert-danger">💰 <b>Monto Rechazado:</b> ${total_rechazo:,.0f}</div>', unsafe_allow_html=True)
             mr2.markdown(f'<div class="alert-box alert-warning">📦 <b>Cantidad Rebotes:</b> {cant_rebotes}</div>', unsafe_allow_html=True)
-            
-            # GRÁFICO PREVENTA VS VENTA
-            if df_p is not None and 'monto_pre' in df_p_filt.columns:
-                total_preventa_base = df_p_filt['monto_pre'].sum()
-                
-                if total_preventa_base > 0:
-                    rechazo_grafico = min(total_rechazo, total_preventa_base)
-                    venta_grafico = max(0, total_preventa_base - rechazo_grafico)
-                    
-                    pct_rebote = (total_rechazo / total_preventa_base) * 100
-                    
-                    df_comp = pd.DataFrame({
-                        'Concepto': ['Venta Efectiva (Aprox)', 'Rechazo (Filtrado)'],
-                        'Monto': [venta_grafico, rechazo_grafico]
-                    })
-                    
-                    fig_comp = px.pie(df_comp, values='Monto', names='Concepto', 
-                                      title=f"Impacto de Rebotes sobre Preventa Total ({pct_rebote:.1f}%)",
-                                      color='Concepto',
-                                      color_discrete_map={'Venta Efectiva (Aprox)': '#2ECC71', 'Rechazo (Filtrado)': '#E74C3C'})
-                    st.plotly_chart(fig_comp, use_container_width=True)
-                else:
-                    st.info(f"Monto Preventa Base es 0. Verifica filtros o datos.")
-            
+                        
             # Identificar columna motivo antes de usarla
             col_motivo = next((c for c in df_r_local.columns if 'motivo' in c), None)
 
